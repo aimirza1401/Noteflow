@@ -1,5 +1,5 @@
 .list {
-  width: 200px; flex-shrink: 0;
+  width: 100%; flex-shrink: 0;
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   overflow-y: auto; background: var(--surface);
