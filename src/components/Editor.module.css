@@ -17,6 +17,7 @@
 .tbBtnStar { color: var(--amber); border-color: var(--amber-bd); background: var(--amber-bg); }
 .tbBtnBell { color: var(--blue); border-color: var(--blue-bd); background: var(--blue-bg); }
 .tbBtnBellUrgent { color: var(--red); border-color: var(--red-bd); background: var(--red-bg); }
+.tbBtnScan { color: var(--blue); border-color: var(--blue-bd); background: var(--blue-bg); }
 .tbBtnDanger:hover { color: var(--red); border-color: var(--red-bd); background: var(--red-bg); }
 .tbBellDot {
   position: absolute; top: 3px; right: 3px;

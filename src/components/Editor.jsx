@@ -1,191 +1,556 @@
-import { useState, useRef } from 'react';
-import { Star, Bell, Trash2, Plus, X } from 'lucide-react';
-import { TAGS } from '../data/notes';
-import ReminderPanel from './ReminderPanel';
-import styles from './Editor.module.css';
+import { useState, useRef, useCallback } from 'react'
 
-function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('bs-BA', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
+import { createWorker } from 'tesseract.js'
+
+import {
+  Camera,
+  Upload,
+  X,
+  FileText,
+  Loader,
+  CheckCircle,
+  AlertCircle,
+  Sparkles
+} from 'lucide-react'
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = e => resolve(e.target.result)
+
+    reader.onerror = () =>
+      reject(new Error('Greška pri čitanju fajla'))
+
+    reader.readAsDataURL(file)
+  })
 }
 
-export default function Editor({
-  note, updateNote, toggleCheckItem, addCheckItem,
-  deleteCheckItem, toggleStar, setReminder, deleteNote,
-}) {
-  const [showReminder, setShowReminder] = useState(false);
-  const [newTask, setNewTask] = useState('');
-  const newTaskRef = useRef(null);
-  const today = new Date().toISOString().split('T')[0];
-  const hasUrgentReminder = note.reminder && note.reminder.date === today;
+function cleanText(raw) {
+  return raw
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .join('\n')
+    .trim()
+}
 
-  const handleTitleChange = (e) => updateNote(note.id, { title: e.target.value });
-  const handleContentChange = (e) => updateNote(note.id, { content: e.target.value });
+// ─────────────────────────────────────────────────────────────
+// Status Badge
+// ─────────────────────────────────────────────────────────────
 
-  const handleAddTask = (e) => {
-    if (e.key === 'Enter' && newTask.trim()) {
-      addCheckItem(note.id, newTask.trim());
-      setNewTask('');
+function StatusBadge({ status, progress }) {
+  const config = {
+    idle: {
+      bg: '#f7f6f3',
+      color: '#a8a59f',
+      text: 'Spreman',
+      Icon: FileText
+    },
+
+    loading: {
+      bg: '#eff4ff',
+      color: '#2563eb',
+      text: `OCR... ${progress}%`,
+      Icon: Loader
+    },
+
+    success: {
+      bg: '#f0fdf4',
+      color: '#16a34a',
+      text: 'Tekst pronađen',
+      Icon: CheckCircle
+    },
+
+    error: {
+      bg: '#fef2f2',
+      color: '#dc2626',
+      text: 'Greška',
+      Icon: AlertCircle
+    },
+
+    notext: {
+      bg: '#fffbeb',
+      color: '#b45309',
+      text: 'Tekst nije nađen',
+      Icon: AlertCircle
     }
-  };
+  }[status] || {}
 
-  const doneCount = note.checklist.filter(c => c.done).length;
-  const totalCount = note.checklist.length;
+  if (status === 'idle') return null
+
+  const { bg, color, text, Icon } = config
 
   return (
-    <div className={styles.editor}>
-      <div className={styles.toolbar}>
-        <button
-          className={`${styles.tbBtn} ${note.starred ? styles.tbBtnStar : ''}`}
-          onClick={() => toggleStar(note.id)}
-          aria-label="Označi zvjezdicom"
-          title="Označi zvjezdicom"
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 12px',
+        background: bg,
+        borderRadius: 20,
+        width: 'fit-content'
+      }}
+    >
+      <Icon
+        size={13}
+        color={color}
+        className={status === 'loading' ? 'spin' : ''}
+      />
+
+      <span
+        style={{
+          fontSize: 12,
+          color,
+          fontWeight: 500
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────
+
+export default function OCRCapture({
+  onSave,
+  onClose
+}) {
+  // ─────────────────────────────────────────────────────────
+  // State
+  // ─────────────────────────────────────────────────────────
+
+  const [preview, setPreview] = useState(null)
+  const [file, setFile] = useState(null)
+  const [text, setText] = useState('')
+  const [title, setTitle] = useState('')
+  const [status, setStatus] = useState('idle')
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+
+  // ─────────────────────────────────────────────────────────
+  // Refs
+  // ─────────────────────────────────────────────────────────
+
+  const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+
+  // ─────────────────────────────────────────────────────────
+  // Handle file
+  // ─────────────────────────────────────────────────────────
+
+  const handleFile = useCallback(async file => {
+    if (!file) return
+
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/bmp'
+    ]
+
+    if (!allowedTypes.includes(file.type)) {
+      setError('Podržani formati: JPG, PNG, WEBP, GIF, BMP')
+      setStatus('error')
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Maksimalna veličina slike je 10MB')
+      setStatus('error')
+      return
+    }
+
+    setFile(file)
+
+    setError('')
+    setText('')
+    setProgress(0)
+    setStatus('idle')
+
+    const imageURL = await readFileAsDataURL(file)
+
+    setPreview(imageURL)
+
+    // Automatski naslov
+
+    const name = file.name
+      .replace(/\.[^.]+$/, '')
+      .replace(/[-_]/g, ' ')
+
+    setTitle(
+      name.length > 0
+        ? name
+        : 'Bilješka sa slike'
+    )
+  }, [])
+
+  // ─────────────────────────────────────────────────────────
+  // Drag & Drop
+  // ─────────────────────────────────────────────────────────
+
+  const onInputChange = event => {
+    handleFile(event.target.files?.[0])
+  }
+
+  const onDrop = event => {
+    event.preventDefault()
+
+    setDragOver(false)
+
+    handleFile(event.dataTransfer.files?.[0])
+  }
+
+  const onDragOver = event => {
+    event.preventDefault()
+    setDragOver(true)
+  }
+
+  const onDragLeave = () => {
+    setDragOver(false)
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // OCR
+  // ─────────────────────────────────────────────────────────
+
+  const runOCR = useCallback(async () => {
+    if (!preview) return
+
+    setStatus('loading')
+    setProgress(0)
+    setText('')
+
+    try {
+      const worker = await createWorker(
+        'bos+eng+deu',
+        1,
+        {
+          logger: message => {
+            if (
+              message.status ===
+              'recognizing text'
+            ) {
+              setProgress(
+                Math.round(
+                  message.progress * 100
+                )
+              )
+            }
+          }
+        }
+      )
+
+      const { data } =
+        await worker.recognize(preview)
+
+      await worker.terminate()
+
+      const cleanedText = cleanText(data.text)
+
+      if (!cleanedText) {
+        setStatus('notext')
+        setText('')
+      } else {
+        setText(cleanedText)
+        setStatus('success')
+      }
+    } catch (err) {
+      console.error(err)
+
+      setError(
+        'OCR nije uspio. Pokušaj s jasnijom slikom.'
+      )
+
+      setStatus('error')
+    }
+  }, [preview])
+
+  // ─────────────────────────────────────────────────────────
+  // Save
+  // ─────────────────────────────────────────────────────────
+
+  const handleSave = () => {
+    if (!text.trim()) return
+
+    onSave({
+      title:
+        title.trim() ||
+        'Bilješka sa slike',
+
+      content: text.trim()
+    })
+
+    onClose()
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Clear
+  // ─────────────────────────────────────────────────────────
+
+  const handleClear = () => {
+    setPreview(null)
+    setFile(null)
+    setText('')
+    setTitle('')
+    setStatus('idle')
+    setError('')
+    setProgress(0)
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = ''
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────
+
+  return (
+    <>
+      {/* Spinner animation */}
+
+      <style>{`
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+      `}</style>
+
+      {/* Overlay */}
+
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,.45)',
+          zIndex: 200,
+
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+
+          padding: 16,
+
+          fontFamily: "'DM Sans', sans-serif"
+        }}
+        onClick={event =>
+          event.target === event.currentTarget &&
+          onClose()
+        }
+      >
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 16,
+
+            width: '100%',
+            maxWidth: 520,
+
+            maxHeight: '90vh',
+            overflow: 'auto',
+
+            display: 'flex',
+            flexDirection: 'column'
+          }}
         >
-          <Star size={14} />
-        </button>
+          {/* Header */}
 
-        <button
-          className={`${styles.tbBtn} ${note.reminder ? styles.tbBtnBell : ''} ${hasUrgentReminder ? styles.tbBtnBellUrgent : ''}`}
-          onClick={() => setShowReminder(v => !v)}
-          aria-label="Podsjetnik"
-          title="Podsjetnik"
-        >
-          <Bell size={14} />
-          {note.reminder && <span className={styles.tbBellDot} />}
-        </button>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
 
-        <div className={styles.tbSep} />
+              padding: '16px 20px',
 
-        <div style={{ flex: 1 }} />
+              borderBottom:
+                '1px solid #e8e6e1'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
 
-        <button
-          className={`${styles.tbBtn} ${styles.tbBtnDanger}`}
-          onClick={() => deleteNote(note.id)}
-          aria-label="Obriši bilješku"
-          title="Obriši bilješku"
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
+                  background: '#eff4ff',
 
-      <div className={styles.body}>
-        <div className={styles.meta}>
-          {formatDate(note.updatedAt)}
-          {note.folder && <span className={styles.metaFolder}> · {note.folder}</span>}
-        </div>
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <Camera
+                  size={16}
+                  color="#2563eb"
+                />
+              </div>
 
-        <input
-          className={styles.title}
-          value={note.title}
-          onChange={handleTitleChange}
-          placeholder="Naslov bilješke..."
-          aria-label="Naslov bilješke"
-        />
+              <div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: '#1a1916'
+                  }}
+                >
+                  OCR – Slika u tekst
+                </div>
 
-        <textarea
-          className={styles.content}
-          value={note.content}
-          onChange={handleContentChange}
-          placeholder="Počni pisati..."
-          rows={5}
-          aria-label="Sadržaj bilješke"
-        />
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#a8a59f'
+                  }}
+                >
+                  Bosanski · Engleski · Njemački
+                </div>
+              </div>
+            </div>
 
-        {(note.checklist.length > 0 || true) && (
-          <div className={styles.checklist}>
-            {note.checklist.length > 0 && (
-              <div className={styles.checklistHeader}>
-                <span className={styles.checklistLabel}>Zadaci</span>
-                <span className={styles.checklistCount}>{doneCount}/{totalCount}</span>
-                {totalCount > 0 && (
-                  <div className={styles.checkProgress}>
-                    <div
-                      className={styles.checkProgressFill}
-                      style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }}
-                    />
-                  </div>
-                )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#a8a59f',
+                cursor: 'pointer',
+
+                padding: 4,
+                borderRadius: 6,
+
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Content */}
+
+          <div
+            style={{
+              padding: 20,
+
+              display: 'flex',
+              flexDirection: 'column',
+
+              gap: 16
+            }}
+          >
+            {/* Drop zone */}
+
+            {!preview ? (
+              <div
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+              >
+                Drop zona ovdje...
+              </div>
+            ) : (
+              <div>
+                <img
+                  src={preview}
+                  alt="Preview"
+                  style={{
+                    width: '100%',
+                    maxHeight: 220,
+                    objectFit: 'contain'
+                  }}
+                />
               </div>
             )}
 
-            {note.checklist.map(item => (
-              <div key={item.id} className={`${styles.checkItem} ${item.done ? styles.checkDone : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={item.done}
-                  onChange={() => toggleCheckItem(note.id, item.id)}
-                  className={styles.checkbox}
-                  aria-label={item.text}
-                />
-                <span className={styles.checkText}>{item.text}</span>
-                <button
-                  className={styles.deleteCheck}
-                  onClick={() => deleteCheckItem(note.id, item.id)}
-                  aria-label="Ukloni zadatak"
-                >
-                  <X size={11} />
+            {/* OCR dugme */}
+
+            {preview &&
+              status !== 'loading' && (
+                <button onClick={runOCR}>
+                  <Sparkles size={13} />
+                  Čitaj tekst
                 </button>
+              )}
+
+            {/* Progress */}
+
+            {status === 'loading' && (
+              <div>
+                OCR u toku...
+                {progress}%
               </div>
-            ))}
+            )}
 
-            <div className={styles.addTask}>
-              <Plus size={12} className={styles.addIcon} />
-              <input
-                ref={newTaskRef}
-                className={styles.addInput}
-                value={newTask}
-                onChange={e => setNewTask(e.target.value)}
-                onKeyDown={handleAddTask}
-                placeholder="Dodaj zadatak... (Enter)"
-                aria-label="Novi zadatak"
+            {/* OCR rezultat */}
+
+            {status === 'success' && (
+              <textarea
+                value={text}
+                onChange={event =>
+                  setText(event.target.value)
+                }
+                rows={8}
               />
-            </div>
+            )}
           </div>
-        )}
 
-        {note.tags.length > 0 && (
-          <div className={styles.tags}>
-            {note.tags.map(t => {
-              const tag = TAGS[t];
-              return tag ? (
-                <span key={t} className={styles.tag} style={{ background: tag.bg, color: tag.color }}>
-                  {tag.label}
-                </span>
-              ) : null;
-            })}
-          </div>
-        )}
-      </div>
+          {/* Footer */}
 
-      {note.reminder && !showReminder && (
-        <div className={`${styles.reminderBar} ${hasUrgentReminder ? styles.reminderUrgent : ''}`}>
-          <Bell size={13} />
-          <div className={styles.reminderInfo}>
-            <span className={styles.reminderTitle}>
-              {hasUrgentReminder ? 'Podsjetnik danas!' : 'Podsjetnik aktivan'}
-            </span>
-            <span className={styles.reminderTime}>
-              {note.reminder.date === today ? 'Danas' :
-               note.reminder.date === new Date(Date.now() + 86400000).toISOString().split('T')[0] ? 'Sutra' :
-               note.reminder.date} · {note.reminder.time}
-              {note.reminder.repeat?.length > 0 && ` · Ponavlja se`}
-            </span>
+          <div
+            style={{
+              padding: '12px 20px',
+
+              borderTop:
+                '1px solid #e8e6e1',
+
+              display: 'flex',
+              gap: 8,
+
+              justifyContent: 'flex-end'
+            }}
+          >
+            <button onClick={onClose}>
+              Odustani
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={!text.trim()}
+            >
+              <FileText size={13} />
+              Sačuvaj bilješku
+            </button>
           </div>
-          <button className={styles.reminderEdit} onClick={() => setShowReminder(true)}>
-            Uredi
-          </button>
         </div>
-      )}
-
-      {showReminder && (
-        <ReminderPanel
-          reminder={note.reminder}
-          onSave={(r) => setReminder(note.id, r)}
-          onClose={() => setShowReminder(false)}
-        />
-      )}
-    </div>
-  );
+      </div>
+    </>
+  )
 }
