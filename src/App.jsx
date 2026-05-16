@@ -37,9 +37,49 @@ export default function App() {
   return <NoteApp userId={session.user.id} userEmail={session.user.email} />
 }
 
+const BOTTOM_NAV = [
+  { id:'sve',       icon:'📋', label:'Bilješke' },
+  { id:'danas',     icon:'🔔', label:'Danas'    },
+  { id:'zadaci',    icon:'☑️',  label:'Zadaci'   },
+  { id:'zvjezdice', icon:'⭐', label:'Označene' },
+  { id:'settings',  icon:'👤', label:'Profil'   },
+]
+
+function BottomNav({ view, setView, activeTab, setActiveTab }) {
+  return (
+    <div style={{
+      display:'flex', background:'#fff',
+      borderTop:'1px solid #e8e6e1', padding:'6px 0 10px',
+      position:'fixed', bottom:0, left:0, right:0, zIndex:100,
+    }}>
+      {BOTTOM_NAV.map(({ id, icon, label }) => {
+        const isActive = id === 'settings'
+          ? activeTab === 'settings'
+          : view === id && activeTab !== 'settings'
+        return (
+          <button key={id} onClick={() => {
+            if (id === 'settings') { setActiveTab('settings') }
+            else { setView(id); setActiveTab('list') }
+          }} style={{
+            flex:1, background:'transparent', border:'none',
+            display:'flex', flexDirection:'column', alignItems:'center',
+            gap:2, padding:'4px 0', cursor:'pointer',
+            color: isActive ? '#2563eb' : '#a8a59f',
+            fontSize:10, fontFamily:"'DM Sans',sans-serif",
+            fontWeight: isActive ? 500 : 400,
+          }}>
+            <span style={{ fontSize:20 }}>{icon}</span>
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function NoteApp({ userId, userEmail }) {
   const isMobile = useIsMobile()
-  const [mobileView, setMobileView] = useState('list')
+  const [activeTab, setActiveTab] = useState('list')
 
   const {
     notes, filteredNotes, activeNote, activeId, setActiveId,
@@ -52,17 +92,17 @@ function NoteApp({ userId, userEmail }) {
 
   const handleSelectNote = (id) => {
     setActiveId(id)
-    if (isMobile) setMobileView('editor')
+    if (isMobile) setActiveTab('editor')
   }
 
   const handleCreateNote = async () => {
     await createNote()
-    if (isMobile) setMobileView('editor')
+    if (isMobile) setActiveTab('editor')
   }
 
   const handleSetView = (v) => {
     setView(v)
-    if (isMobile) setMobileView('list')
+    if (isMobile) setActiveTab('list')
   }
 
   if (loading) return (
@@ -74,91 +114,58 @@ function NoteApp({ userId, userEmail }) {
 
   if (isMobile) {
     return (
-      <div style={{ height:'100vh', overflow:'hidden', background:'var(--bg)',
-        fontFamily:"'DM Sans',sans-serif" }}>
+      <div style={{ height:'100vh', background:'var(--bg)',
+        fontFamily:"'DM Sans',sans-serif", display:'flex', flexDirection:'column' }}>
 
-        {mobileView === 'sidebar' && (
-          <div style={{ height:'100%', overflow:'auto' }}>
-            <Sidebar
-              view={view} setView={handleSetView}
-              search={search} setSearch={setSearch}
-              notes={notes} createNote={handleCreateNote}
-              userEmail={userEmail} onLogout={logout}
-            />
-          </div>
-        )}
-
-        {mobileView === 'list' && (
-          <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
+        {activeTab === 'list' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10,
-              padding:'12px 14px', background:'var(--surface)',
-              borderBottom:'1px solid var(--border)' }}>
-              <button onClick={() => setMobileView('sidebar')} style={{
-                background:'transparent', border:'none', fontSize:20,
-                cursor:'pointer', color:'var(--text-2)', padding:'0 4px'
-              }}>☰</button>
+              padding:'12px 14px', background:'#fff',
+              borderBottom:'1px solid #e8e6e1', flexShrink:0 }}>
+              <span style={{ fontSize:14, fontWeight:500, color:'#1a1916' }}>NoteFlow</span>
               <div style={{ flex:1, display:'flex', alignItems:'center', gap:7,
-                background:'var(--bg)', border:'1px solid var(--border)',
+                background:'#f7f6f3', border:'1px solid #e8e6e1',
                 borderRadius:8, padding:'7px 10px' }}>
-                <span style={{ fontSize:13, color:'var(--text-3)' }}>🔍</span>
-                <input
-                  style={{ border:'none', background:'transparent', fontSize:13,
-                    color:'var(--text-1)', outline:'none', width:'100%' }}
+                <span style={{ fontSize:12, color:'#a8a59f' }}>🔍</span>
+                <input style={{ border:'none', background:'transparent', fontSize:13,
+                  color:'#1a1916', outline:'none', width:'100%' }}
                   placeholder="Pretraži..."
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                 />
               </div>
               <button onClick={handleCreateNote} style={{
-                background:'var(--blue)', border:'none', color:'#fff',
+                background:'#2563eb', border:'none', color:'#fff',
                 borderRadius:8, padding:'7px 12px', fontSize:13,
-                fontWeight:500, cursor:'pointer'
+                fontWeight:500, cursor:'pointer', flexShrink:0,
               }}>+ Nova</button>
             </div>
 
-            <div style={{ flex:1, overflow:'auto' }}>
+            <div style={{ flex:1, overflow:'auto', paddingBottom:70 }}>
               <NoteList
                 notes={filteredNotes} activeId={activeId}
                 setActiveId={handleSelectNote} view={view}
               />
-            </div>
-
-            <div style={{ display:'flex', background:'var(--surface)',
-              borderTop:'1px solid var(--border)', padding:'8px 0' }}>
-              {[
-                { id:'sve', icon:'📋', label:'Sve' },
-                { id:'danas', icon:'🔔', label:'Danas' },
-                { id:'zadaci', icon:'✓', label:'Zadaci' },
-                { id:'zvjezdice', icon:'⭐', label:'Označene' },
-              ].map(({ id, icon, label }) => (
-                <button key={id} onClick={() => handleSetView(id)} style={{
-                  flex:1, background:'transparent', border:'none',
-                  display:'flex', flexDirection:'column', alignItems:'center',
-                  gap:2, padding:'6px 0', cursor:'pointer',
-                  color: view === id ? 'var(--blue)' : 'var(--text-3)',
-                  fontSize:11, fontFamily:"'DM Sans',sans-serif"
-                }}>
-                  <span style={{ fontSize:18 }}>{icon}</span>
-                  {label}
-                </button>
-              ))}
+              {filteredNotes.length === 0 && (
+                <div style={{ display:'flex', flexDirection:'column',
+                  alignItems:'center', justifyContent:'center',
+                  gap:12, padding:40, color:'#a8a59f' }}>
+                  <span style={{ fontSize:36 }}>📝</span>
+                  <span style={{ fontSize:13 }}>Nema bilješki</span>
+                  <button onClick={handleCreateNote} style={{
+                    padding:'8px 18px', background:'#2563eb', color:'#fff',
+                    border:'none', borderRadius:8, fontSize:13,
+                    fontWeight:500, cursor:'pointer'
+                  }}>+ Kreiraj prvu bilješku</button>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {mobileView === 'editor' && (
-          <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10,
-              padding:'12px 14px', background:'var(--surface)',
-              borderBottom:'1px solid var(--border)' }}>
-              <button onClick={() => setMobileView('list')} style={{
-                background:'transparent', border:'none', fontSize:15,
-                cursor:'pointer', color:'var(--blue)', fontWeight:500,
-                display:'flex', alignItems:'center', gap:4,
-                fontFamily:"'DM Sans',sans-serif"
-              }}>← Nazad</button>
-            </div>
-            <div style={{ flex:1, overflow:'auto' }}>
+        {activeTab === 'editor' && (
+          <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+            <div style={{ flex:1, overflow:'auto', paddingBottom:70 }}>
               {activeNote
                 ? <Editor
                     note={activeNote}
@@ -168,17 +175,65 @@ function NoteApp({ userId, userEmail }) {
                     deleteCheckItem={deleteCheckItem}
                     toggleStar={toggleStar}
                     setReminder={setReminder}
-                    deleteNote={(id) => { deleteNote(id); setMobileView('list') }}
+                    deleteNote={(id) => { deleteNote(id); setActiveTab('list') }}
                   />
                 : <div style={{ display:'flex', alignItems:'center',
                     justifyContent:'center', height:'100%',
-                    color:'var(--text-3)', fontSize:13 }}>
+                    color:'#a8a59f', fontSize:13 }}>
                     Odaberi bilješku
                   </div>
               }
             </div>
           </div>
         )}
+
+        {activeTab === 'settings' && (
+          <div style={{ flex:1, overflow:'auto', paddingBottom:90,
+            background:'#fff', padding:'24px 20px 90px' }}>
+            <div style={{ fontSize:16, fontWeight:500,
+              marginBottom:20, color:'#1a1916' }}>Profil</div>
+
+            <div style={{ background:'#f7f6f3', borderRadius:12, padding:'16px',
+              marginBottom:16, display:'flex', alignItems:'center', gap:12 }}>
+              <div style={{ width:44, height:44, borderRadius:22, background:'#eff4ff',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                fontSize:20 }}>👤</div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:500, color:'#1a1916' }}>{userEmail}</div>
+                <div style={{ fontSize:11, color:'#a8a59f' }}>NoteFlow nalog</div>
+              </div>
+            </div>
+
+            <div style={{ background:'#f7f6f3', borderRadius:12,
+              overflow:'hidden', marginBottom:16 }}>
+              {[
+                { icon:'📊', label:'Ukupno bilješki', value: notes.length },
+                { icon:'☑️', label:'Aktivni zadaci', value: notes.filter(n=>n.checklist?.some(c=>!c.done)).length },
+                { icon:'🔔', label:'Podsjetnici', value: notes.filter(n=>n.reminder).length },
+                { icon:'⭐', label:'Označene', value: notes.filter(n=>n.starred).length },
+              ].map(({ icon, label, value }, i, arr) => (
+                <div key={label} style={{ display:'flex', alignItems:'center', gap:12,
+                  padding:'12px 16px',
+                  borderBottom: i < arr.length-1 ? '1px solid #e8e6e1' : 'none' }}>
+                  <span>{icon}</span>
+                  <span style={{ flex:1, fontSize:13, color:'#1a1916' }}>{label}</span>
+                  <span style={{ fontSize:13, fontWeight:500, color:'#2563eb' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
+            <button onClick={logout} style={{
+              width:'100%', padding:'12px', background:'#fef2f2',
+              color:'#dc2626', border:'1px solid #fecaca',
+              borderRadius:10, fontSize:13, fontWeight:500, cursor:'pointer',
+            }}>Odjavi se</button>
+          </div>
+        )}
+
+        <BottomNav
+          view={view} setView={handleSetView}
+          activeTab={activeTab} setActiveTab={setActiveTab}
+        />
       </div>
     )
   }
