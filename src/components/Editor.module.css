@@ -1,0 +1,108 @@
+.editor {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface);
+}
+
+.toolbar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+.tbBtn {
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-s); padding: 5px 8px;
+  color: var(--text-2); display: flex; align-items: center; gap: 5px;
+  font-size: 12px; transition: all .1s; position: relative;
+}
+.tbBtn:hover { background: var(--bg); color: var(--text-1); }
+.tbBtnStar { color: var(--amber); border-color: var(--amber-bd); background: var(--amber-bg); }
+.tbBtnBell { color: var(--blue); border-color: var(--blue-bd); background: var(--blue-bg); }
+.tbBtnBellUrgent { color: var(--red); border-color: var(--red-bd); background: var(--red-bg); }
+.tbBtnDanger:hover { color: var(--red); border-color: var(--red-bd); background: var(--red-bg); }
+.tbBellDot {
+  position: absolute; top: 3px; right: 3px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--blue);
+}
+.tbBtnBellUrgent .tbBellDot { background: var(--red); }
+.tbSep { width: 1px; height: 16px; background: var(--border); margin: 0 2px; }
+
+.body { flex: 1; padding: 20px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+
+.meta { font-size: 11px; color: var(--text-3); }
+.metaFolder { text-transform: capitalize; }
+
+.title {
+  font-size: 20px; font-weight: 500; color: var(--text-1);
+  border: none; outline: none; background: transparent; width: 100%;
+}
+.title::placeholder { color: var(--text-3); }
+
+.content {
+  font-size: 13px; color: var(--text-2); line-height: 1.75;
+  border: none; outline: none; background: transparent; width: 100%;
+  min-height: 80px;
+}
+.content::placeholder { color: var(--text-3); }
+
+.checklist {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+}
+.checklistHeader {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.checklistLabel { font-size: 11px; font-weight: 500; color: var(--text-2); flex: 1; }
+.checklistCount { font-size: 10px; color: var(--text-3); }
+.checkProgress { width: 60px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.checkProgressFill { height: 100%; background: var(--green); border-radius: 2px; transition: width .3s; }
+
+.checkItem {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.checkItem:hover { background: var(--bg); }
+.checkItem:hover .deleteCheck { opacity: 1; }
+.checkItem:last-of-type { border-bottom: none; }
+.checkDone .checkText { color: var(--text-3); text-decoration: line-through; }
+
+.checkbox { accent-color: var(--green); width: 14px; height: 14px; flex-shrink: 0; cursor: pointer; }
+.checkText { font-size: 13px; color: var(--text-1); flex: 1; }
+.deleteCheck {
+  background: transparent; border: none; color: var(--text-3);
+  padding: 2px; border-radius: 3px; opacity: 0;
+  display: flex; align-items: center; transition: opacity .1s, background .1s;
+}
+.deleteCheck:hover { background: var(--red-bg); color: var(--red); }
+
+.addTask {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--bg);
+}
+.addIcon { color: var(--text-3); flex-shrink: 0; }
+.addInput {
+  border: none; background: transparent; font-size: 13px;
+  color: var(--text-1); outline: none; width: 100%;
+}
+.addInput::placeholder { color: var(--text-3); }
+
+.tags { display: flex; gap: 5px; flex-wrap: wrap; padding-top: 4px; }
+.tag { font-size: 11px; padding: 3px 9px; border-radius: 10px; }
+
+.reminderBar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 16px 12px; padding: 9px 12px;
+  background: var(--blue-bg); border: 1px solid var(--blue-bd);
+  border-radius: var(--radius); color: var(--blue);
+}
+.reminderUrgent {
+  background: var(--red-bg); border-color: var(--red-bd); color: var(--red);
+}
+.reminderInfo { flex: 1; }
+.reminderTitle { font-size: 12px; font-weight: 500; display: block; }
+.reminderTime { font-size: 11px; opacity: .75; }
+.reminderEdit {
+  font-size: 11px; background: transparent; border: none;
+  color: inherit; text-decoration: underline; opacity: .8;
+}
+.reminderEdit:hover { opacity: 1; }

@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #f7f6f3;
+  --surface:   #ffffff;
+  --border:    #e8e6e1;
+  --border-s:  #d4d1cb;
+  --text-1:    #1a1916;
+  --text-2:    #6b6860;
+  --text-3:    #a8a59f;
+  --blue:      #2563eb;
+  --blue-bg:   #eff4ff;
+  --blue-bd:   #bfcdfd;
+  --green-bg:  #f0fdf4;
+  --green:     #16a34a;
+  --green-bd:  #bbf7d0;
+  --amber-bg:  #fffbeb;
+  --amber:     #b45309;
+  --amber-bd:  #fde68a;
+  --purple-bg: #f5f3ff;
+  --purple:    #6d28d9;
+  --purple-bd: #ddd6fe;
+  --red:       #dc2626;
+  --red-bg:    #fef2f2;
+  --red-bd:    #fecaca;
+  --radius:    10px;
+  --radius-s:  6px;
+  --radius-l:  14px;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, textarea { font-family: inherit; }
+textarea { resize: none; }
