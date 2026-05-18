@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { restoreNotifications } from '../notifications'
 
 export function useNotes(userId) {
   const [notes, setNotes]       = useState([])
@@ -18,8 +19,11 @@ export function useNotes(userId) {
       .then(({ data, error }) => {
         if (error) console.error(error)
         else {
-          setNotes(data || [])
-          if (data && data.length > 0) setActiveId(data[0].id)
+          const loaded = data || []
+          setNotes(loaded)
+          if (loaded.length > 0) setActiveId(loaded[0].id)
+          // Obnovi notifikacije pri svakom loadu
+          restoreNotifications(loaded)
         }
         setLoading(false)
       })
@@ -50,7 +54,8 @@ export function useNotes(userId) {
     setNotes(prev => {
       const note = prev.find(n => n.id === noteId)
       if (!note) return prev
-      const checklist = note.checklist.map(c => c.id === itemId ? { ...c, done: !c.done } : c)
+      const checklist = note.checklist.map(c =>
+        c.id === itemId ? { ...c, done: !c.done } : c)
       supabase.from('notes').update({ checklist }).eq('id', noteId)
       return prev.map(n => n.id === noteId ? { ...n, checklist } : n)
     })
