@@ -9,6 +9,7 @@ import NoteList from './components/NoteList'
 import Editor from './components/Editor'
 import Login from './components/Login'
 import LanguagePicker from './components/LanguagePicker'
+import { useOnlineStatus } from './hooks/useOnlineStatus'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -23,10 +24,13 @@ function useIsMobile() {
 export default function App() {
   const { t } = useTranslation()
   const [session, setSession] = useState(undefined)
-  const [langChosen, setLangChosen] = useState(() => !!localStorage.getItem('nf_lang_chosen'))
+  const [langChosen, setLangChosen] = useState(() => { try { return !!localStorage.getItem('nf_lang_chosen') } catch { return false } })
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) console.error("getSession error:", error)
+      setSession(data?.session ?? null)
+    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => subscription.unsubscribe()
   }, [])
@@ -114,13 +118,14 @@ function BottomNav({ view, setView, activeTab, setActiveTab }) {
 function NoteApp({ userId, userEmail }) {
   const { t, i18n } = useTranslation()
   const { dark, setDark } = useTheme()
+  const isOnline = useOnlineStatus()
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState('list')
   const today = new Date().toISOString().split('T')[0]
 
   const {
     notes, filteredNotes, activeNote, activeId, setActiveId,
-    view, setView, search, setSearch, loading,
+    view, setView, search, setSearch, loading, syncing,
     updateNote, toggleCheckItem, addCheckItem, deleteCheckItem,
     createNote, deleteNote, toggleStar, setReminder,
   } = useNotes(userId)
@@ -142,6 +147,26 @@ function NoteApp({ userId, userEmail }) {
     </div>
   )
 
+  // ── Offline & Syncing Banner ──
+  const OfflineBanner = () => (
+    <>
+      {!isOnline && (
+        <div style={{ background:'#1a1916', color:'#f0ede8', padding:'8px 16px',
+          fontSize:12, display:'flex', alignItems:'center', gap:8,
+          position:'sticky', top:0, zIndex:200 }}>
+          <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
+        </div>
+      )}
+      {isOnline && syncing && (
+        <div style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'6px 16px',
+          fontSize:12, display:'flex', alignItems:'center', gap:8,
+          position:'sticky', top:0, zIndex:200 }}>
+          <span>🔄</span> Sinhronizujem promjene...
+        </div>
+      )}
+    </>
+  )
+
   // ── MOBILE ──
   if (isMobile) {
     return (
@@ -149,6 +174,7 @@ function NoteApp({ userId, userEmail }) {
         fontFamily:"'DM Sans',sans-serif", display:'flex', flexDirection:'column' }}>
 
         {/* LIST */}
+        <OfflineBanner />
         {activeTab === 'list' && (
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
             {/* Header */}
