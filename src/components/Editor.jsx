@@ -1,41 +1,41 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Star, Bell, Trash2, Plus, X, Camera } from 'lucide-react'
 import { TAGS } from '../data/notes'
 import ReminderPanel from './ReminderPanel'
 import OCRCapture from './OCRCapture'
 import ConfirmModal from './ConfirmModal'
-import RichEditor from './RichEditor'
 import { requestPermission, scheduleNotification, cancelNotification } from '../notifications'
 import styles from './Editor.module.css'
 
 function formatDate(iso) {
-  return new Date(iso).toLocaleDateString('bs-BA', {
-    day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
+  try {
+    return new Date(iso).toLocaleDateString('bs-BA', {
+      day: 'numeric', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    })
+  } catch { return '' }
 }
 
 export default function Editor({
   note, updateNote, toggleCheckItem, addCheckItem,
   deleteCheckItem, toggleStar, setReminder, deleteNote,
 }) {
-  const [showReminder,  setShowReminder]  = useState(false)
-  const [showOCR,       setShowOCR]       = useState(false)
-  const [showConfirm,   setShowConfirm]   = useState(false)
-  const [newTask,       setNewTask]       = useState('')
-  const [notifGranted,  setNotifGranted]  = useState(Notification?.permission === 'granted')
+  const [showReminder, setShowReminder] = useState(false)
+  const [showOCR,      setShowOCR]      = useState(false)
+  const [showConfirm,  setShowConfirm]  = useState(false)
+  const [newTask,      setNewTask]      = useState('')
+  const [notifGranted, setNotifGranted] = useState(
+    typeof Notification !== 'undefined' && Notification.permission === 'granted'
+  )
   const newTaskRef = useRef(null)
+
+  if (!note) return null
+
   const today = new Date().toISOString().split('T')[0]
   const hasUrgentReminder = note.reminder && note.reminder.date === today
 
-  // Request notification permission on mount
-  useEffect(() => {
-    if (Notification?.permission !== 'granted') return
-    setNotifGranted(true)
-  }, [])
-
   const handleTitleChange   = e => updateNote(note.id, { title: e.target.value })
-  const handleContentChange = html => updateNote(note.id, { content: html })
+  const handleContentChange = e => updateNote(note.id, { content: e.target.value })
 
   const handleAddTask = e => {
     if (e.key === 'Enter' && newTask.trim()) {
@@ -50,31 +50,44 @@ export default function Editor({
 
   const handleDeleteConfirmed = () => {
     setShowConfirm(false)
-    cancelNotification(note.id)
+    try { cancelNotification(note.id) } catch {}
     deleteNote(note.id)
   }
 
   const handleSaveReminder = async (reminder) => {
     setReminder(note.id, reminder)
     if (reminder) {
-      let granted = notifGranted
-      if (!granted) {
-        granted = await requestPermission()
-        setNotifGranted(granted)
-      }
-      if (granted) {
-        scheduleNotification({ ...note, reminder })
-      }
+      try {
+        let granted = notifGranted
+        if (!granted) {
+          granted = await requestPermission()
+          setNotifGranted(granted)
+        }
+        if (granted) scheduleNotification({ ...note, reminder })
+      } catch {}
     } else {
-      cancelNotification(note.id)
+      try { cancelNotification(note.id) } catch {}
     }
   }
 
-  const doneCount  = note.checklist?.filter(c => c.done).length || 0
-  const totalCount = note.checklist?.length || 0
+  const checklist   = note.checklist || []
+  const doneCount   = checklist.filter(c => c.done).length
+  const totalCount  = checklist.length
+
+  // Konvertuj HTML content u plain text za textarea
+  const plainContent = (() => {
+    try {
+      if (!note.content) return ''
+      if (!note.content.includes('<')) return note.content
+      const div = document.createElement('div')
+      div.innerHTML = note.content
+      return div.innerText || div.textContent || ''
+    } catch { return note.content || '' }
+  })()
 
   return (
     <div className={styles.editor}>
+      {/* Toolbar */}
       <div className={styles.toolbar}>
         <button
           className={`${styles.tbBtn} ${note.starred ? styles.tbBtnStar : ''}`}
@@ -87,14 +100,11 @@ export default function Editor({
           onClick={() => setShowReminder(v => !v)} title="Podsjetnik">
           <Bell size={14} />
           {note.reminder && <span className={styles.tbBellDot} />}
-          {!notifGranted && note.reminder && (
-            <span style={{ fontSize:9, marginLeft:2, color:'var(--amber)' }} title="Notifikacije nisu dozvoljene">⚠</span>
-          )}
         </button>
 
         <button
           className={styles.tbBtn}
-          onClick={() => setShowOCR(true)} title="Slika u tekst (OCR)"
+          onClick={() => setShowOCR(true)} title="Slika u tekst"
           style={{ display:'flex', alignItems:'center', gap:5 }}>
           <Camera size={14} />
           <span style={{ fontSize:11 }}>Slika→Tekst</span>
@@ -105,11 +115,12 @@ export default function Editor({
 
         <button
           className={`${styles.tbBtn} ${styles.tbBtnDanger}`}
-          onClick={() => setShowConfirm(true)} title="Obriši bilješku">
+          onClick={() => setShowConfirm(true)} title="Obriši">
           <Trash2 size={14} />
         </button>
       </div>
 
+      {/* Body */}
       <div className={styles.body}>
         <div className={styles.meta}>
           {formatDate(note.updatedAt || note.updated_at)}
@@ -118,16 +129,32 @@ export default function Editor({
 
         <input
           className={styles.title}
-          value={note.title}
+          value={note.title || ''}
           onChange={handleTitleChange}
           placeholder="Naslov bilješke..."
         />
 
-        {/* Rich Text Editor */}
-        <RichEditor
-          content={note.content || ''}
+        {/* Jednostavan textarea - radi na svim uređajima */}
+        <textarea
+          value={plainContent}
           onChange={handleContentChange}
           placeholder="Počni pisati..."
+          rows={6}
+          style={{
+            width: '100%',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '12px 14px',
+            fontSize: 14,
+            color: 'var(--text-2)',
+            background: 'var(--surface)',
+            outline: 'none',
+            fontFamily: "'DM Sans', sans-serif",
+            lineHeight: 1.75,
+            resize: 'vertical',
+            boxSizing: 'border-box',
+            WebkitAppearance: 'none',
+          }}
         />
 
         {/* Checklist */}
@@ -138,12 +165,12 @@ export default function Editor({
               <span className={styles.checklistCount}>{doneCount}/{totalCount}</span>
               <div className={styles.checkProgress}>
                 <div className={styles.checkProgressFill}
-                  style={{ width:`${Math.round((doneCount/totalCount)*100)}%` }} />
+                  style={{ width: totalCount > 0 ? `${Math.round((doneCount/totalCount)*100)}%` : '0%' }} />
               </div>
             </div>
           )}
 
-          {note.checklist?.map(item => (
+          {checklist.map(item => (
             <div key={item.id} className={`${styles.checkItem} ${item.done ? styles.checkDone : ''}`}>
               <input type="checkbox" checked={item.done}
                 onChange={() => toggleCheckItem(note.id, item.id)}
@@ -164,31 +191,32 @@ export default function Editor({
           </div>
         </div>
 
-        {note.tags?.length > 0 && (
+        {/* Tagovi */}
+        {(note.tags || []).length > 0 && (
           <div className={styles.tags}>
             {note.tags.map(t => {
               const tag = TAGS[t]
               return tag ? (
                 <span key={t} className={styles.tag}
-                  style={{ background:tag.bg, color:tag.color }}>{tag.label}</span>
+                  style={{ background: tag.bg, color: tag.color }}>{tag.label}</span>
               ) : null
             })}
           </div>
         )}
       </div>
 
-      {/* Notification permission banner */}
+      {/* Notifikacija dozvola */}
       {!notifGranted && (
         <div style={{ margin:'0 16px 10px', padding:'9px 12px',
           background:'var(--amber-bg)', border:'1px solid var(--amber-bd)',
           borderRadius:8, display:'flex', alignItems:'center', gap:10, fontSize:12 }}>
           <span>⚠️</span>
-          <span style={{ flex:1, color:'var(--amber)' }}>
-            Dozvoli notifikacije za stvarne podsjetnike
-          </span>
+          <span style={{ flex:1, color:'var(--amber)' }}>Dozvoli notifikacije za podsjetnike</span>
           <button onClick={async () => {
-            const ok = await requestPermission()
-            setNotifGranted(ok)
+            try {
+              const ok = await requestPermission()
+              setNotifGranted(ok)
+            } catch {}
           }} style={{ padding:'4px 10px', background:'var(--amber)', color:'#fff',
             border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:500 }}>
             Dozvoli
@@ -208,8 +236,6 @@ export default function Editor({
               {note.reminder.date === today ? 'Danas' :
                note.reminder.date === new Date(Date.now()+86400000).toISOString().split('T')[0]
                ? 'Sutra' : note.reminder.date} · {note.reminder.time}
-              {note.reminder.repeat?.length > 0 && ' · Ponavlja se'}
-              {notifGranted ? ' 🔔' : ' (bez notif.)'}
             </span>
           </div>
           <button className={styles.reminderEdit} onClick={() => setShowReminder(true)}>
@@ -219,18 +245,13 @@ export default function Editor({
       )}
 
       {showReminder && (
-        <ReminderPanel
-          reminder={note.reminder}
+        <ReminderPanel reminder={note.reminder}
           onSave={handleSaveReminder}
-          onClose={() => setShowReminder(false)}
-        />
+          onClose={() => setShowReminder(false)} />
       )}
 
       {showOCR && (
-        <OCRCapture
-          onSave={handleOCRSave}
-          onClose={() => setShowOCR(false)}
-        />
+        <OCRCapture onSave={handleOCRSave} onClose={() => setShowOCR(false)} />
       )}
 
       {showConfirm && (
@@ -238,8 +259,7 @@ export default function Editor({
           title="Obriši bilješku?"
           message={`"${note.title}" će biti trajno obrisana.`}
           onConfirm={handleDeleteConfirmed}
-          onCancel={() => setShowConfirm(false)}
-        />
+          onCancel={() => setShowConfirm(false)} />
       )}
     </div>
   )
