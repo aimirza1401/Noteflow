@@ -111,7 +111,7 @@ function NoteApp({ userId, userEmail }) {
 
   const {
     notes, filteredNotes, activeNote, activeId, setActiveId,
-    view, setView, search, setSearch, loading,
+    view, setView, search, setSearch, loading, syncing,
     updateNote, toggleCheckItem, addCheckItem, deleteCheckItem,
     createNote, deleteNote, toggleStar, setReminder,
   } = useNotes(userId)
@@ -139,6 +139,12 @@ function NoteApp({ userId, userEmail }) {
 
         {/* Offline banner */}
         {!isOnline && (
+          <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
+            fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
+          </div>
+        )}
+        {isOnline && syncing && (
           <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
             fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
             <span>📵</span> Offline mod – bilješke se čuvaju lokalno
@@ -320,6 +326,12 @@ function NoteApp({ userId, userEmail }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
       {!isOnline && (
+          <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
+            fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
+          </div>
+        )}
+        {isOnline && syncing && (
         <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
           fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
           <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
