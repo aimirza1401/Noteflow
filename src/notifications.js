@@ -1,5 +1,4 @@
-// Notification service – stvarne browser push notifikacije
-
+// Notifications - browser push
 export async function requestPermission() {
   if (!('Notification' in window)) return false
   if (Notification.permission === 'granted') return true
@@ -11,41 +10,21 @@ export function scheduleNotification(note) {
   if (!note.reminder) return
   const { date, time } = note.reminder
   if (!date || !time) return
-
   const fireAt = new Date(`${date}T${time}:00`)
-  const now = new Date()
-  const delay = fireAt.getTime() - now.getTime()
-
-  if (delay <= 0) return // prošlo je
-
+  const delay = fireAt.getTime() - Date.now()
+  if (delay <= 0) return
   const key = `notif_${note.id}`
-
-  // Obrisi stari timer ako postoji
-  const oldTimer = window._nfTimers?.[key]
-  if (oldTimer) clearTimeout(oldTimer)
   if (!window._nfTimers) window._nfTimers = {}
-
+  if (window._nfTimers[key]) clearTimeout(window._nfTimers[key])
   window._nfTimers[key] = setTimeout(() => {
     if (Notification.permission !== 'granted') return
     const n = new Notification(`⏰ ${note.title}`, {
-      body: note.content
-        ? note.content.slice(0, 80)
-        : 'NoteFlow podsjetnik',
+      body: note.content?.replace(/<[^>]*>/g, '').slice(0, 80) || 'NoteFlow podsjetnik',
       icon: '/favicon.svg',
-      badge: '/favicon.svg',
       tag: key,
     })
-    n.onclick = () => {
-      window.focus()
-      n.close()
-    }
+    n.onclick = () => { window.focus(); n.close() }
   }, delay)
-
-  // Sačuvaj u localStorage da se obnovi pri refreshu
-  const stored = JSON.parse(localStorage.getItem('nf_reminders') || '[]')
-  const filtered = stored.filter(r => r.id !== note.id)
-  filtered.push({ id: note.id, title: note.title, content: note.content, date, time })
-  localStorage.setItem('nf_reminders', JSON.stringify(filtered))
 }
 
 export function cancelNotification(noteId) {
@@ -54,13 +33,9 @@ export function cancelNotification(noteId) {
     clearTimeout(window._nfTimers[key])
     delete window._nfTimers[key]
   }
-  const stored = JSON.parse(localStorage.getItem('nf_reminders') || '[]')
-  localStorage.setItem('nf_reminders', JSON.stringify(stored.filter(r => r.id !== noteId)))
 }
 
 export function restoreNotifications(notes) {
   if (Notification.permission !== 'granted') return
-  notes.forEach(note => {
-    if (note.reminder) scheduleNotification(note)
-  })
+  notes.forEach(note => { if (note.reminder) scheduleNotification(note) })
 }

@@ -1,10 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { restoreNotifications } from '../notifications'
-import {
-  getAllNotesLocal, saveNoteLocal, saveNotesLocal,
-  deleteNoteLocal, addToSyncQueue, getSyncQueue, clearSyncItem,
-} from '../offlineDB'
 
 export function useNotes(userId) {
   const [notes,    setNotes]    = useState([])
@@ -12,90 +7,30 @@ export function useNotes(userId) {
   const [view,     setView]     = useState('sve')
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(true)
-  const [syncing,  setSyncing]  = useState(false)
-  const activeIdRef = useRef(null)
-
-  useEffect(() => { activeIdRef.current = activeId }, [activeId])
 
   useEffect(() => {
     if (!userId) return
 
-    const loadNotes = async () => {
-      setLoading(true)
-
-      // Timeout safety – nikad ne ostaj na loading zauvijek
-      const timeout = setTimeout(() => setLoading(false), 8000)
-
+    const load = async () => {
       try {
-        // 1. Lokalne bilješke odmah (offline first)
-        let local = []
-        try { local = await getAllNotesLocal() } catch (e) { console.warn('local load err', e) }
-
-        if (local.length > 0) {
-          const sorted = [...local].sort((a, b) =>
-            new Date(b.updated_at || 0) - new Date(a.updated_at || 0))
-          setNotes(sorted)
-          setActiveId(sorted[0].id)
-          restoreNotifications(sorted)
-          setLoading(false)
-          clearTimeout(timeout)
-        }
-
-        // 2. Supabase – uvijek pokušaj bez obzira na online status
         const { data, error } = await supabase
           .from('notes')
           .select('*')
           .order('updated_at', { ascending: false })
 
-        if (error) {
-          console.warn('Supabase load error:', error.message)
-          setLoading(false)
-          clearTimeout(timeout)
-          return
-        }
-
+        if (error) throw error
         const fetched = data || []
-        try { await saveNotesLocal(fetched) } catch (e) { console.warn('save local err', e) }
         setNotes(fetched)
-        if (fetched.length > 0 && !activeIdRef.current) setActiveId(fetched[0].id)
-        restoreNotifications(fetched)
-
-        try { await processSyncQueue() } catch (e) { console.warn('sync err', e) }
-
+        if (fetched.length > 0) setActiveId(fetched[0].id)
       } catch (e) {
-        console.warn('loadNotes error:', e)
+        console.error('Greška pri učitavanju:', e)
       } finally {
         setLoading(false)
-        clearTimeout(timeout)
       }
     }
 
-    loadNotes()
+    load()
   }, [userId])
-
-  const processSyncQueue = async () => {
-    const queue = await getSyncQueue()
-    if (queue.length === 0) return
-    setSyncing(true)
-    for (const item of queue) {
-      try {
-        if (item.type === 'update')
-          await supabase.from('notes').update(item.data).eq('id', item.noteId)
-        else if (item.type === 'create')
-          await supabase.from('notes').insert(item.data)
-        else if (item.type === 'delete')
-          await supabase.from('notes').delete().eq('id', item.noteId)
-        await clearSyncItem(item.id)
-      } catch (e) { console.warn('sync item err', e) }
-    }
-    setSyncing(false)
-  }
-
-  useEffect(() => {
-    const handler = () => processSyncQueue()
-    window.addEventListener('online', handler)
-    return () => window.removeEventListener('online', handler)
-  }, [])
 
   const activeNote = notes.find(n => n.id === activeId) || null
 
@@ -116,14 +51,8 @@ export function useNotes(userId) {
   const updateNote = useCallback(async (id, changes) => {
     const updated = { ...changes, updated_at: new Date().toISOString() }
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updated } : n))
-    try {
-      const full = notes.find(n => n.id === id)
-      if (full) await saveNoteLocal({ ...full, ...updated })
-      await supabase.from('notes').update(updated).eq('id', id)
-    } catch (e) {
-      await addToSyncQueue({ type: 'update', noteId: id, data: updated }).catch(() => {})
-    }
-  }, [notes])
+    await supabase.from('notes').update(updated).eq('id', id)
+  }, [])
 
   const toggleCheckItem = useCallback(async (noteId, itemId) => {
     setNotes(prev => {
@@ -131,10 +60,8 @@ export function useNotes(userId) {
       if (!note) return prev
       const checklist = note.checklist.map(c =>
         c.id === itemId ? { ...c, done: !c.done } : c)
-      const updated = { ...note, checklist }
-      saveNoteLocal(updated).catch(() => {})
-      supabase.from('notes').update({ checklist }).eq('id', noteId).catch(() => {})
-      return prev.map(n => n.id === noteId ? updated : n)
+      supabase.from('notes').update({ checklist }).eq('id', noteId)
+      return prev.map(n => n.id === noteId ? { ...n, checklist } : n)
     })
   }, [])
 
@@ -144,10 +71,8 @@ export function useNotes(userId) {
       if (!note) return prev
       const item = { id: 'c' + Date.now(), text, done: false }
       const checklist = [...(note.checklist || []), item]
-      const updated = { ...note, checklist }
-      saveNoteLocal(updated).catch(() => {})
-      supabase.from('notes').update({ checklist }).eq('id', noteId).catch(() => {})
-      return prev.map(n => n.id === noteId ? updated : n)
+      supabase.from('notes').update({ checklist }).eq('id', noteId)
+      return prev.map(n => n.id === noteId ? { ...n, checklist } : n)
     })
   }, [])
 
@@ -156,10 +81,8 @@ export function useNotes(userId) {
       const note = prev.find(n => n.id === noteId)
       if (!note) return prev
       const checklist = note.checklist.filter(c => c.id !== itemId)
-      const updated = { ...note, checklist }
-      saveNoteLocal(updated).catch(() => {})
-      supabase.from('notes').update({ checklist }).eq('id', noteId).catch(() => {})
-      return prev.map(n => n.id === noteId ? updated : n)
+      supabase.from('notes').update({ checklist }).eq('id', noteId)
+      return prev.map(n => n.id === noteId ? { ...n, checklist } : n)
     })
   }, [])
 
@@ -175,64 +98,40 @@ export function useNotes(userId) {
       reminder: null,
       updated_at: new Date().toISOString(),
     }
-    try {
-      const { data, error } = await supabase
-        .from('notes').insert(note).select().single()
-      if (error) throw error
-      await saveNoteLocal(data).catch(() => {})
-      setNotes(prev => [data, ...prev])
-      setActiveId(data.id)
-    } catch (e) {
-      const tempId = 'local_' + Date.now()
-      const local = { ...note, id: tempId }
-      await saveNoteLocal(local).catch(() => {})
-      await addToSyncQueue({ type: 'create', noteId: tempId, data: local }).catch(() => {})
-      setNotes(prev => [local, ...prev])
-      setActiveId(tempId)
-    }
+    const { data, error } = await supabase
+      .from('notes').insert(note).select().single()
+    if (error) { console.error(error); return }
+    setNotes(prev => [data, ...prev])
+    setActiveId(data.id)
   }, [userId, view])
 
   const deleteNote = useCallback(async (id) => {
-    await deleteNoteLocal(id).catch(() => {})
     setNotes(prev => {
       const remaining = prev.filter(n => n.id !== id)
-      if (activeIdRef.current === id)
-        setActiveId(remaining.length > 0 ? remaining[0].id : null)
+      if (activeId === id) setActiveId(remaining.length > 0 ? remaining[0].id : null)
       return remaining
     })
-    supabase.from('notes').delete().eq('id', id).catch(() => {
-      addToSyncQueue({ type: 'delete', noteId: id }).catch(() => {})
-    })
-  }, [])
+    await supabase.from('notes').delete().eq('id', id)
+  }, [activeId])
 
   const toggleStar = useCallback(async (id) => {
     setNotes(prev => {
       const note = prev.find(n => n.id === id)
       if (!note) return prev
       const starred = !note.starred
-      const updated = { ...note, starred }
-      saveNoteLocal(updated).catch(() => {})
-      supabase.from('notes').update({ starred }).eq('id', id).catch(() => {})
-      return prev.map(n => n.id === id ? updated : n)
+      supabase.from('notes').update({ starred }).eq('id', id)
+      return prev.map(n => n.id === id ? { ...n, starred } : n)
     })
   }, [])
 
   const setReminder = useCallback(async (id, reminder) => {
-    setNotes(prev => {
-      const note = prev.find(n => n.id === id)
-      if (!note) return prev
-      const updated = { ...note, reminder }
-      saveNoteLocal(updated).catch(() => {})
-      return prev.map(n => n.id === id ? updated : n)
-    })
-    supabase.from('notes').update({ reminder }).eq('id', id).catch(() => {
-      addToSyncQueue({ type: 'update', noteId: id, data: { reminder } }).catch(() => {})
-    })
+    setNotes(prev => prev.map(n => n.id === id ? { ...n, reminder } : n))
+    await supabase.from('notes').update({ reminder }).eq('id', id)
   }, [])
 
   return {
     notes, filteredNotes, activeNote, activeId, setActiveId,
-    view, setView, search, setSearch, loading, syncing,
+    view, setView, search, setSearch, loading,
     updateNote, toggleCheckItem, addCheckItem, deleteCheckItem,
     createNote, deleteNote, toggleStar, setReminder,
   }

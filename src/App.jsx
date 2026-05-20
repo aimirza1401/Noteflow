@@ -9,7 +9,6 @@ import NoteList from './components/NoteList'
 import Editor from './components/Editor'
 import Login from './components/Login'
 import LanguagePicker from './components/LanguagePicker'
-import { useOnlineStatus } from './hooks/useOnlineStatus'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -21,14 +20,28 @@ function useIsMobile() {
   return isMobile
 }
 
+function useOnline() {
+  const [online, setOnline] = useState(navigator.onLine)
+  useEffect(() => {
+    const on  = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online',  on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+  return online
+}
+
 export default function App() {
   const { t } = useTranslation()
   const [session, setSession] = useState(undefined)
-  const [langChosen, setLangChosen] = useState(() => { try { return !!localStorage.getItem('nf_lang_chosen') } catch { return false } })
+  const [langChosen, setLangChosen] = useState(() => {
+    try { return !!localStorage.getItem('nf_lang_chosen') } catch { return false }
+  })
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data, error }) => {
-      if (error) console.error("getSession error:", error)
+      if (error) console.error('getSession error:', error)
       setSession(data?.session ?? null)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
@@ -48,64 +61,37 @@ export default function App() {
 }
 
 const BOTTOM_NAV_KEYS = [
-  { id:'sve',       tKey:'allNotes',  icon:'≡'  },
-  { id:'danas',     tKey:'remindersToday', icon:'📅' },
-  { id:'zadaci',    tKey:'tasks',     icon:'✓'  },
-  { id:'zvjezdice', tKey:'starred',   icon:'☆'  },
-  { id:'settings',  tKey:'profile',   icon:'👤' },
+  { id:'sve',       tKey:'allNotes'      },
+  { id:'danas',     tKey:'remindersToday'},
+  { id:'zadaci',    tKey:'tasks'         },
+  { id:'zvjezdice', tKey:'starred'       },
+  { id:'settings',  tKey:'profile'       },
 ]
 
 function BottomNav({ view, setView, activeTab, setActiveTab }) {
   const { t } = useTranslation()
   const ICONS = {
-    sve: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--blue)' : 'var(--text-3)'} strokeWidth="2">
-        <rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/>
-      </svg>
-    ),
-    danas: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--blue)' : 'var(--text-3)'} strokeWidth="2">
-        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-      </svg>
-    ),
-    zadaci: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--blue)' : 'var(--text-3)'} strokeWidth="2">
-        <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-      </svg>
-    ),
-    zvjezdice: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'var(--blue)' : 'none'} stroke={active ? 'var(--blue)' : 'var(--text-3)'} strokeWidth="2">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-    ),
-    settings: (active) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--blue)' : 'var(--text-3)'} strokeWidth="2">
-        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>
-      </svg>
-    ),
+    sve: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>,
+    danas: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+    zadaci: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
+    zvjezdice: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill={a?'var(--blue)':'none'} stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+    settings: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   }
-
   return (
     <div style={{ display:'flex', background:'var(--surface)',
       borderTop:'1px solid var(--border)', padding:'8px 0 12px',
       position:'fixed', bottom:0, left:0, right:0, zIndex:100 }}>
       {BOTTOM_NAV_KEYS.map(({ id, tKey }) => {
-        const isActive = id === 'settings'
-          ? activeTab === 'settings'
-          : view === id && activeTab !== 'settings'
+        const isActive = id === 'settings' ? activeTab === 'settings' : view === id && activeTab !== 'settings'
         return (
           <button key={id} onClick={() => {
             if (id === 'settings') setActiveTab('settings')
             else { setView(id); setActiveTab('list') }
-          }} style={{
-            flex:1, background:'transparent', border:'none',
+          }} style={{ flex:1, background:'transparent', border:'none',
             display:'flex', flexDirection:'column', alignItems:'center',
-            gap:3, padding:'2px 0', cursor:'pointer',
-            fontFamily:"'DM Sans',sans-serif",
-          }}>
+            gap:3, padding:'2px 0', cursor:'pointer', fontFamily:"'DM Sans',sans-serif" }}>
             {ICONS[id]?.(isActive)}
-            <span style={{ fontSize:10, color: isActive ? 'var(--blue)' : 'var(--text-3)',
-              fontWeight: isActive ? 500 : 400 }}>
+            <span style={{ fontSize:10, color:isActive?'var(--blue)':'var(--text-3)', fontWeight:isActive?500:400 }}>
               {t(tKey).split(' ')[0]}
             </span>
           </button>
@@ -118,25 +104,23 @@ function BottomNav({ view, setView, activeTab, setActiveTab }) {
 function NoteApp({ userId, userEmail }) {
   const { t, i18n } = useTranslation()
   const { dark, setDark } = useTheme()
-  const isOnline = useOnlineStatus()
   const isMobile = useIsMobile()
+  const isOnline = useOnline()
   const [activeTab, setActiveTab] = useState('list')
   const today = new Date().toISOString().split('T')[0]
 
   const {
     notes, filteredNotes, activeNote, activeId, setActiveId,
-    view, setView, search, setSearch, loading, syncing,
+    view, setView, search, setSearch, loading,
     updateNote, toggleCheckItem, addCheckItem, deleteCheckItem,
     createNote, deleteNote, toggleStar, setReminder,
   } = useNotes(userId)
 
   const logout = () => supabase.auth.signOut()
-  const changeLanguage = (lang) => { i18n.changeLanguage(lang); localStorage.setItem('nf_lang', lang) }
-
+  const changeLanguage = (lang) => { i18n.changeLanguage(lang); try { localStorage.setItem('nf_lang', lang) } catch {} }
   const handleSelectNote = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
   const handleCreateNote = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
   const handleSetView = (v) => { setView(v); if (isMobile) setActiveTab('list') }
-
   const todayCount = notes.filter(n => n.reminder && n.reminder.date === today).length
 
   if (loading) return (
@@ -147,40 +131,25 @@ function NoteApp({ userId, userEmail }) {
     </div>
   )
 
-  // ── Offline & Syncing Banner ──
-  const OfflineBanner = () => (
-    <>
-      {!isOnline && (
-        <div style={{ background:'#1a1916', color:'#f0ede8', padding:'8px 16px',
-          fontSize:12, display:'flex', alignItems:'center', gap:8,
-          position:'sticky', top:0, zIndex:200 }}>
-          <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
-        </div>
-      )}
-      {isOnline && syncing && (
-        <div style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'6px 16px',
-          fontSize:12, display:'flex', alignItems:'center', gap:8,
-          position:'sticky', top:0, zIndex:200 }}>
-          <span>🔄</span> Sinhronizujem promjene...
-        </div>
-      )}
-    </>
-  )
-
   // ── MOBILE ──
   if (isMobile) {
     return (
       <div style={{ height:'100vh', background:'var(--bg)',
         fontFamily:"'DM Sans',sans-serif", display:'flex', flexDirection:'column' }}>
 
+        {/* Offline banner */}
+        {!isOnline && (
+          <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
+            fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
+          </div>
+        )}
+
         {/* LIST */}
-        <OfflineBanner />
         {activeTab === 'list' && (
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
-            {/* Header */}
             <div style={{ padding:'16px 16px 8px', background:'var(--bg)', flexShrink:0 }}>
-              <div style={{ display:'flex', alignItems:'center',
-                justifyContent:'space-between', marginBottom:14 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                   <div style={{ width:36, height:36, borderRadius:10, background:'var(--blue-bg)',
                     display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📝</div>
@@ -189,15 +158,13 @@ function NoteApp({ userId, userEmail }) {
                 <div style={{ position:'relative' }}>
                   <div style={{ width:40, height:40, borderRadius:20, background:'var(--surface)',
                     border:'1px solid var(--border)', display:'flex', alignItems:'center',
-                    justifyContent:'center', cursor:'pointer', fontSize:18 }}>🔔</div>
+                    justifyContent:'center', fontSize:18 }}>🔔</div>
                   {todayCount > 0 && (
                     <div style={{ position:'absolute', top:4, right:4, width:8, height:8,
                       borderRadius:4, background:'var(--blue)' }} />
                   )}
                 </div>
               </div>
-
-              {/* Search */}
               <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                 <div style={{ flex:1, display:'flex', alignItems:'center', gap:8,
                   background:'var(--surface)', border:'1px solid var(--border)',
@@ -209,42 +176,38 @@ function NoteApp({ userId, userEmail }) {
                     placeholder={t('allNotes') + '...'}
                     value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
-                <div style={{ width:44, height:44, borderRadius:12, background:'var(--surface)',
-                  border:'1px solid var(--border)', display:'flex', alignItems:'center',
-                  justifyContent:'center', cursor:'pointer', fontSize:18 }}>⚙️</div>
               </div>
             </div>
-
-            {/* Scrollable list with filters inside */}
             <div style={{ flex:1, overflowY:'auto' }}>
-              <NoteList
-                notes={filteredNotes} activeId={activeId}
+              <NoteList notes={filteredNotes} activeId={activeId}
                 setActiveId={handleSelectNote} view={view}
-                setView={handleSetView} allNotes={notes}
-              />
+                setView={handleSetView} allNotes={notes} />
+              {filteredNotes.length === 0 && (
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
+                  justifyContent:'center', gap:12, padding:40, color:'var(--text-3)' }}>
+                  <span style={{ fontSize:36 }}>📝</span>
+                  <span style={{ fontSize:13 }}>{t('noNotes')}</span>
+                </div>
+              )}
             </div>
-
-            {/* FAB */}
             <button onClick={handleCreateNote} style={{
               position:'fixed', bottom:80, right:20, width:56, height:56,
               borderRadius:28, background:'var(--blue)', border:'none',
               color:'#fff', fontSize:28, cursor:'pointer', zIndex:99,
               boxShadow:'0 4px 16px rgba(37,99,235,.4)',
-              display:'flex', alignItems:'center', justifyContent:'center',
-            }}>+</button>
+              display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
           </div>
         )}
 
         {/* EDITOR */}
         {activeTab === 'editor' && (
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
-            {/* Back header */}
             <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
               background:'var(--surface)', borderBottom:'1px solid var(--border)', flexShrink:0 }}>
               <button onClick={() => setActiveTab('list')} style={{
                 background:'transparent', border:'none', color:'var(--blue)',
                 fontSize:15, fontWeight:500, cursor:'pointer',
-                fontFamily:"'DM Sans',sans-serif", display:'flex', alignItems:'center', gap:4 }}>
+                fontFamily:"'DM Sans',sans-serif" }}>
                 ← {t('allNotes')}
               </button>
             </div>
@@ -264,14 +227,12 @@ function NoteApp({ userId, userEmail }) {
           </div>
         )}
 
-        {/* SETTINGS / PROFILE */}
+        {/* SETTINGS */}
         {activeTab === 'settings' && (
           <div style={{ flex:1, overflowY:'auto', background:'var(--bg)', paddingBottom:90 }}>
             <div style={{ padding:'20px 16px 12px' }}>
               <span style={{ fontSize:18, fontWeight:600, color:'var(--text-1)' }}>{t('profile')}</span>
             </div>
-
-            {/* User card */}
             <div style={{ margin:'0 16px 16px', background:'var(--surface)',
               borderRadius:16, padding:'16px', border:'1px solid var(--border)',
               display:'flex', alignItems:'center', gap:14 }}>
@@ -282,8 +243,6 @@ function NoteApp({ userId, userEmail }) {
                 <div style={{ fontSize:12, color:'var(--text-3)' }}>{t('account')}</div>
               </div>
             </div>
-
-            {/* Stats */}
             <div style={{ margin:'0 16px 16px', background:'var(--surface)',
               borderRadius:16, overflow:'hidden', border:'1px solid var(--border)' }}>
               {[
@@ -301,8 +260,6 @@ function NoteApp({ userId, userEmail }) {
                 </div>
               ))}
             </div>
-
-            {/* Dark mode */}
             <div style={{ margin:'0 16px 12px', background:'var(--surface)',
               borderRadius:16, padding:'14px 16px', border:'1px solid var(--border)',
               display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -319,8 +276,6 @@ function NoteApp({ userId, userEmail }) {
                   transition:'left .2s', boxShadow:'0 1px 4px rgba(0,0,0,.2)' }} />
               </div>
             </div>
-
-            {/* Language */}
             <div style={{ margin:'0 16px 16px', background:'var(--surface)',
               borderRadius:16, padding:'16px', border:'1px solid var(--border)' }}>
               <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:10,
@@ -337,15 +292,14 @@ function NoteApp({ userId, userEmail }) {
                 ].map(({ code, label, flag }) => (
                   <button key={code} onClick={() => changeLanguage(code)} style={{
                     padding:'7px 14px', borderRadius:20, fontSize:13, cursor:'pointer',
-                    border: `1.5px solid ${i18n.language === code ? 'var(--blue)' : 'var(--border)'}`,
-                    background: i18n.language === code ? 'var(--blue-bg)' : 'transparent',
-                    color: i18n.language === code ? 'var(--blue)' : 'var(--text-2)',
-                    fontFamily:"'DM Sans',sans-serif", fontWeight: i18n.language === code ? 500 : 400,
+                    border:`1.5px solid ${i18n.language===code?'var(--blue)':'var(--border)'}`,
+                    background: i18n.language===code ? 'var(--blue-bg)' : 'transparent',
+                    color: i18n.language===code ? 'var(--blue)' : 'var(--text-2)',
+                    fontFamily:"'DM Sans',sans-serif", fontWeight: i18n.language===code ? 500 : 400,
                   }}>{flag} {label}</button>
                 ))}
               </div>
             </div>
-
             <div style={{ margin:'0 16px' }}>
               <button onClick={logout} style={{
                 width:'100%', padding:'14px', background:'var(--red-bg)',
@@ -364,39 +318,47 @@ function NoteApp({ userId, userEmail }) {
 
   // ── DESKTOP ──
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
-      <Sidebar view={view} setView={setView} search={search} setSearch={setSearch}
-        notes={notes} createNote={createNote} userEmail={userEmail} onLogout={logout}
-        dark={dark} setDark={setDark} currentLang={i18n.language} onLangChange={changeLanguage} />
-      <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-        <div style={{ width:340, flexShrink:0, borderRight:'1px solid var(--border)',
-          overflow:'hidden', display:'flex', flexDirection:'column' }}>
-          <NoteList notes={filteredNotes} activeId={activeId}
-            setActiveId={setActiveId} view={view} setView={setView} allNotes={notes} />
-          <button onClick={createNote} style={{
-            position:'fixed', bottom:24, left:370, width:52, height:52,
-            borderRadius:26, background:'var(--blue)', border:'none',
-            color:'#fff', fontSize:26, cursor:'pointer', zIndex:99,
-            boxShadow:'0 4px 16px rgba(37,99,235,.35)',
-            display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+    <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
+      {!isOnline && (
+        <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
+          fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
+          <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
         </div>
-        {activeNote
-          ? <Editor note={activeNote} updateNote={updateNote}
-              toggleCheckItem={toggleCheckItem} addCheckItem={addCheckItem}
-              deleteCheckItem={deleteCheckItem} toggleStar={toggleStar}
-              setReminder={setReminder} deleteNote={deleteNote} />
-          : <div style={{ flex:1, display:'flex', flexDirection:'column',
-              alignItems:'center', justifyContent:'center', gap:12,
-              color:'var(--text-3)', fontSize:13, background:'var(--surface)' }}>
-              <span style={{ fontSize:40 }}>📝</span>
-              <span style={{ fontSize:15 }}>{t('selectOrCreate')}</span>
-              <button onClick={createNote} style={{ padding:'10px 22px',
-                background:'var(--blue)', color:'#fff', border:'none',
-                borderRadius:10, fontSize:13, fontWeight:500, cursor:'pointer' }}>
-                + {t('newNote')}
-              </button>
-            </div>
-        }
+      )}
+      <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+        <Sidebar view={view} setView={setView} search={search} setSearch={setSearch}
+          notes={notes} createNote={createNote} userEmail={userEmail} onLogout={logout}
+          dark={dark} setDark={setDark} currentLang={i18n.language} onLangChange={changeLanguage} />
+        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+          <div style={{ width:340, flexShrink:0, borderRight:'1px solid var(--border)',
+            overflow:'hidden', display:'flex', flexDirection:'column' }}>
+            <NoteList notes={filteredNotes} activeId={activeId}
+              setActiveId={setActiveId} view={view} setView={setView} allNotes={notes} />
+            <button onClick={createNote} style={{
+              position:'fixed', bottom:24, left:370, width:52, height:52,
+              borderRadius:26, background:'var(--blue)', border:'none',
+              color:'#fff', fontSize:26, cursor:'pointer', zIndex:99,
+              boxShadow:'0 4px 16px rgba(37,99,235,.35)',
+              display:'flex', alignItems:'center', justifyContent:'center' }}>+</button>
+          </div>
+          {activeNote
+            ? <Editor note={activeNote} updateNote={updateNote}
+                toggleCheckItem={toggleCheckItem} addCheckItem={addCheckItem}
+                deleteCheckItem={deleteCheckItem} toggleStar={toggleStar}
+                setReminder={setReminder} deleteNote={deleteNote} />
+            : <div style={{ flex:1, display:'flex', flexDirection:'column',
+                alignItems:'center', justifyContent:'center', gap:12,
+                color:'var(--text-3)', fontSize:13, background:'var(--surface)' }}>
+                <span style={{ fontSize:40 }}>📝</span>
+                <span style={{ fontSize:15 }}>{t('selectOrCreate')}</span>
+                <button onClick={createNote} style={{ padding:'10px 22px',
+                  background:'var(--blue)', color:'#fff', border:'none',
+                  borderRadius:10, fontSize:13, fontWeight:500, cursor:'pointer' }}>
+                  + {t('newNote')}
+                </button>
+              </div>
+          }
+        </div>
       </div>
     </div>
   )
