@@ -9,6 +9,8 @@ import NoteList from './components/NoteList'
 import Editor from './components/Editor'
 import Login from './components/Login'
 import LanguagePicker from './components/LanguagePicker'
+import Onboarding from './components/Onboarding'
+import SharedNote from './components/SharedNote'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -33,11 +35,19 @@ function useOnline() {
 }
 
 export default function App() {
-  const { t } = useTranslation()
+  const { i18n } = useTranslation()
   const [session, setSession] = useState(undefined)
   const [langChosen, setLangChosen] = useState(() => {
     try { return !!localStorage.getItem('nf_lang_chosen') } catch { return false }
   })
+  const [onboardingDone, setOnboardingDone] = useState(() => {
+    try { return !!localStorage.getItem('nf_onboarding_done') } catch { return false }
+  })
+
+  // Check if this is a share link
+  const shareId = window.location.pathname.startsWith('/share/')
+    ? window.location.pathname.split('/share/')[1]
+    : null
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data, error }) => {
@@ -48,12 +58,21 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Public share page – no auth needed
+  if (shareId) return <SharedNote shareId={shareId} />
+
+  // Language picker – first time only
   if (!langChosen) return <LanguagePicker onDone={() => setLangChosen(true)} />
+
+  // Onboarding – after language, before login
+  if (!onboardingDone) return (
+    <Onboarding lang={i18n.language} onDone={() => setOnboardingDone(true)} />
+  )
 
   if (session === undefined) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
       height:'100vh', fontFamily:"'DM Sans',sans-serif", color:'var(--text-3)',
-      fontSize:13, background:'var(--bg)' }}>{t('loading')}</div>
+      fontSize:13, background:'var(--bg)' }}>Učitavanje...</div>
   )
 
   if (!session) return <Login />
@@ -61,21 +80,21 @@ export default function App() {
 }
 
 const BOTTOM_NAV_KEYS = [
-  { id:'sve',       tKey:'allNotes'      },
-  { id:'danas',     tKey:'remindersToday'},
-  { id:'zadaci',    tKey:'tasks'         },
-  { id:'zvjezdice', tKey:'starred'       },
-  { id:'settings',  tKey:'profile'       },
+  { id:'sve',       tKey:'allNotes'       },
+  { id:'danas',     tKey:'remindersToday' },
+  { id:'zadaci',    tKey:'tasks'          },
+  { id:'zvjezdice', tKey:'starred'        },
+  { id:'settings',  tKey:'profile'        },
 ]
 
 function BottomNav({ view, setView, activeTab, setActiveTab }) {
   const { t } = useTranslation()
   const ICONS = {
-    sve: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>,
-    danas: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
-    zadaci: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
+    sve:       (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="13" y2="13"/></svg>,
+    danas:     (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+    zadaci:    (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>,
     zvjezdice: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill={a?'var(--blue)':'none'} stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
-    settings: (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    settings:  (a) => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={a?'var(--blue)':'var(--text-3)'} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
   }
   return (
     <div style={{ display:'flex', background:'var(--surface)',
@@ -104,8 +123,8 @@ function BottomNav({ view, setView, activeTab, setActiveTab }) {
 function NoteApp({ userId, userEmail }) {
   const { t, i18n } = useTranslation()
   const { dark, setDark } = useTheme()
-  const isMobile = useIsMobile()
-  const isOnline = useOnline()
+  const isMobile  = useIsMobile()
+  const isOnline  = useOnline()
   const [activeTab, setActiveTab] = useState('list')
   const today = new Date().toISOString().split('T')[0]
 
@@ -117,10 +136,13 @@ function NoteApp({ userId, userEmail }) {
   } = useNotes(userId)
 
   const logout = () => supabase.auth.signOut()
-  const changeLanguage = (lang) => { i18n.changeLanguage(lang); try { localStorage.setItem('nf_lang', lang) } catch {} }
-  const handleSelectNote = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
-  const handleCreateNote = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
-  const handleSetView = (v) => { setView(v); if (isMobile) setActiveTab('list') }
+  const changeLanguage = (lang) => {
+    i18n.changeLanguage(lang)
+    try { localStorage.setItem('nf_lang', lang) } catch {}
+  }
+  const handleSelectNote  = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
+  const handleCreateNote  = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
+  const handleSetView     = (v) => { setView(v); if (isMobile) setActiveTab('list') }
   const todayCount = notes.filter(n => n.reminder && n.reminder.date === today).length
 
   if (loading) return (
@@ -137,7 +159,6 @@ function NoteApp({ userId, userEmail }) {
       <div style={{ height:'100vh', background:'var(--bg)',
         fontFamily:"'DM Sans',sans-serif", display:'flex', flexDirection:'column' }}>
 
-        {/* Offline banner */}
         {!isOnline && (
           <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
             fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
@@ -145,13 +166,12 @@ function NoteApp({ userId, userEmail }) {
           </div>
         )}
         {isOnline && syncing && (
-          <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
+          <div style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'6px 16px',
             fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
+            <span>🔄</span> Sinhronizujem...
           </div>
         )}
 
-        {/* LIST */}
         {activeTab === 'list' && (
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
             <div style={{ padding:'16px 16px 8px', background:'var(--bg)', flexShrink:0 }}>
@@ -171,17 +191,15 @@ function NoteApp({ userId, userEmail }) {
                   )}
                 </div>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <div style={{ flex:1, display:'flex', alignItems:'center', gap:8,
-                  background:'var(--surface)', border:'1px solid var(--border)',
-                  borderRadius:12, padding:'10px 14px' }}>
-                  <span style={{ fontSize:14, color:'var(--text-3)' }}>🔍</span>
-                  <input style={{ border:'none', background:'transparent', fontSize:14,
-                    color:'var(--text-1)', outline:'none', width:'100%',
-                    fontFamily:"'DM Sans',sans-serif" }}
-                    placeholder={t('allNotes') + '...'}
-                    value={search} onChange={e => setSearch(e.target.value)} />
-                </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8,
+                background:'var(--surface)', border:'1px solid var(--border)',
+                borderRadius:12, padding:'10px 14px' }}>
+                <span style={{ fontSize:14, color:'var(--text-3)' }}>🔍</span>
+                <input style={{ border:'none', background:'transparent', fontSize:14,
+                  color:'var(--text-1)', outline:'none', width:'100%',
+                  fontFamily:"'DM Sans',sans-serif" }}
+                  placeholder={t('allNotes') + '...'}
+                  value={search} onChange={e => setSearch(e.target.value)} />
               </div>
             </div>
             <div style={{ flex:1, overflowY:'auto' }}>
@@ -190,7 +208,7 @@ function NoteApp({ userId, userEmail }) {
                 setView={handleSetView} allNotes={notes} />
               {filteredNotes.length === 0 && (
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
-                  justifyContent:'center', gap:12, padding:40, color:'var(--text-3)' }}>
+                  gap:12, padding:40, color:'var(--text-3)' }}>
                   <span style={{ fontSize:36 }}>📝</span>
                   <span style={{ fontSize:13 }}>{t('noNotes')}</span>
                 </div>
@@ -205,7 +223,6 @@ function NoteApp({ userId, userEmail }) {
           </div>
         )}
 
-        {/* EDITOR */}
         {activeTab === 'editor' && (
           <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
@@ -233,7 +250,6 @@ function NoteApp({ userId, userEmail }) {
           </div>
         )}
 
-        {/* SETTINGS */}
         {activeTab === 'settings' && (
           <div style={{ flex:1, overflowY:'auto', background:'var(--bg)', paddingBottom:90 }}>
             <div style={{ padding:'20px 16px 12px' }}>
@@ -301,7 +317,7 @@ function NoteApp({ userId, userEmail }) {
                     border:`1.5px solid ${i18n.language===code?'var(--blue)':'var(--border)'}`,
                     background: i18n.language===code ? 'var(--blue-bg)' : 'transparent',
                     color: i18n.language===code ? 'var(--blue)' : 'var(--text-2)',
-                    fontFamily:"'DM Sans',sans-serif", fontWeight: i18n.language===code ? 500 : 400,
+                    fontFamily:"'DM Sans',sans-serif", fontWeight: i18n.language===code?500:400,
                   }}>{flag} {label}</button>
                 ))}
               </div>
@@ -326,15 +342,15 @@ function NoteApp({ userId, userEmail }) {
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
       {!isOnline && (
-          <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
-            fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
-          </div>
-        )}
-        {isOnline && syncing && (
         <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
           fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
           <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
+        </div>
+      )}
+      {isOnline && syncing && (
+        <div style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'6px 16px',
+          fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
+          <span>🔄</span> Sinhronizujem promjene...
         </div>
       )}
       <div style={{ display:'flex', flex:1, overflow:'hidden' }}>

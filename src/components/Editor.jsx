@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react'
-import { Star, Bell, Trash2, Plus, X, Camera } from 'lucide-react'
+import { Star, Bell, Trash2, Plus, X, Camera, Download, Share2 } from 'lucide-react'
 import { TAGS } from '../data/notes'
 import ReminderPanel from './ReminderPanel'
 import OCRCapture from './OCRCapture'
 import ConfirmModal from './ConfirmModal'
+import ShareModal from './ShareModal'
 import { requestPermission, scheduleNotification, cancelNotification } from '../notifications'
+import { exportNoteToPDF } from '../exportPDF'
 import styles from './Editor.module.css'
 
 function formatDate(iso) {
@@ -23,10 +25,13 @@ export default function Editor({
   const [showReminder, setShowReminder] = useState(false)
   const [showOCR,      setShowOCR]      = useState(false)
   const [showConfirm,  setShowConfirm]  = useState(false)
+  const [showShare,    setShowShare]    = useState(false)
   const [newTask,      setNewTask]      = useState('')
-  const [notifGranted, setNotifGranted] = useState(
-    typeof Notification !== 'undefined' && Notification.permission === 'granted'
-  )
+  const [exporting,    setExporting]    = useState(false)
+  const [notifGranted, setNotifGranted] = useState(() => {
+    try { return typeof Notification !== 'undefined' && Notification.permission === 'granted' }
+    catch { return false }
+  })
   const newTaskRef = useRef(null)
 
   if (!note) return null
@@ -44,9 +49,7 @@ export default function Editor({
     }
   }
 
-  const handleOCRSave = ({ title, content }) => {
-    updateNote(note.id, { title, content })
-  }
+  const handleOCRSave = ({ title, content }) => updateNote(note.id, { title, content })
 
   const handleDeleteConfirmed = () => {
     setShowConfirm(false)
@@ -59,10 +62,7 @@ export default function Editor({
     if (reminder) {
       try {
         let granted = notifGranted
-        if (!granted) {
-          granted = await requestPermission()
-          setNotifGranted(granted)
-        }
+        if (!granted) { granted = await requestPermission(); setNotifGranted(granted) }
         if (granted) scheduleNotification({ ...note, reminder })
       } catch {}
     } else {
@@ -70,11 +70,17 @@ export default function Editor({
     }
   }
 
-  const checklist   = note.checklist || []
-  const doneCount   = checklist.filter(c => c.done).length
-  const totalCount  = checklist.length
+  const handleExportPDF = async () => {
+    setExporting(true)
+    try { await exportNoteToPDF(note) }
+    catch (e) { console.error('PDF export error:', e) }
+    setExporting(false)
+  }
 
-  // Konvertuj HTML content u plain text za textarea
+  const checklist  = note.checklist || []
+  const doneCount  = checklist.filter(c => c.done).length
+  const totalCount = checklist.length
+
   const plainContent = (() => {
     try {
       if (!note.content) return ''
@@ -87,11 +93,9 @@ export default function Editor({
 
   return (
     <div className={styles.editor}>
-      {/* Toolbar */}
       <div className={styles.toolbar}>
-        <button
-          className={`${styles.tbBtn} ${note.starred ? styles.tbBtnStar : ''}`}
-          onClick={() => toggleStar(note.id)} title="Označi zvjezdicom">
+        <button className={`${styles.tbBtn} ${note.starred ? styles.tbBtnStar : ''}`}
+          onClick={() => toggleStar(note.id)} title="Zvjezdica">
           <Star size={14} />
         </button>
 
@@ -102,62 +106,59 @@ export default function Editor({
           {note.reminder && <span className={styles.tbBellDot} />}
         </button>
 
-        <button
-          className={styles.tbBtn}
-          onClick={() => setShowOCR(true)} title="Slika u tekst"
-          style={{ display:'flex', alignItems:'center', gap:5 }}>
+        <button className={styles.tbBtn} onClick={() => setShowOCR(true)} title="Slika u tekst"
+          style={{ display:'flex', alignItems:'center', gap:4 }}>
           <Camera size={14} />
-          <span style={{ fontSize:11 }}>Slika→Tekst</span>
+          <span style={{ fontSize:11 }}>OCR</span>
+        </button>
+
+        <button className={styles.tbBtn} onClick={handleExportPDF}
+          disabled={exporting} title="Export u PDF"
+          style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <Download size={14} />
+          <span style={{ fontSize:11 }}>{exporting ? '...' : 'PDF'}</span>
+        </button>
+
+        <button className={styles.tbBtn} onClick={() => setShowShare(true)}
+          title="Dijeli bilješku"
+          style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <Share2 size={14} />
+          <span style={{ fontSize:11 }}>Dijeli</span>
         </button>
 
         <div className={styles.tbSep} />
         <div style={{ flex:1 }} />
 
-        <button
-          className={`${styles.tbBtn} ${styles.tbBtnDanger}`}
+        <button className={`${styles.tbBtn} ${styles.tbBtnDanger}`}
           onClick={() => setShowConfirm(true)} title="Obriši">
           <Trash2 size={14} />
         </button>
       </div>
 
-      {/* Body */}
       <div className={styles.body}>
         <div className={styles.meta}>
           {formatDate(note.updatedAt || note.updated_at)}
           {note.folder && <span className={styles.metaFolder}> · {note.folder}</span>}
         </div>
 
-        <input
-          className={styles.title}
-          value={note.title || ''}
-          onChange={handleTitleChange}
-          placeholder="Naslov bilješke..."
-        />
+        <input className={styles.title} value={note.title || ''}
+          onChange={handleTitleChange} placeholder="Naslov bilješke..." />
 
-        {/* Jednostavan textarea - radi na svim uređajima */}
         <textarea
           value={plainContent}
           onChange={handleContentChange}
           placeholder="Počni pisati..."
           rows={6}
           style={{
-            width: '100%',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: '12px 14px',
-            fontSize: 14,
-            color: 'var(--text-2)',
-            background: 'var(--surface)',
-            outline: 'none',
-            fontFamily: "'DM Sans', sans-serif",
-            lineHeight: 1.75,
-            resize: 'vertical',
-            boxSizing: 'border-box',
-            WebkitAppearance: 'none',
+            width:'100%', border:'1px solid var(--border)',
+            borderRadius:10, padding:'12px 14px', fontSize:14,
+            color:'var(--text-2)', background:'var(--surface)',
+            outline:'none', fontFamily:"'DM Sans',sans-serif",
+            lineHeight:1.75, resize:'vertical',
+            boxSizing:'border-box', WebkitAppearance:'none',
           }}
         />
 
-        {/* Checklist */}
         <div className={styles.checklist}>
           {totalCount > 0 && (
             <div className={styles.checklistHeader}>
@@ -165,7 +166,7 @@ export default function Editor({
               <span className={styles.checklistCount}>{doneCount}/{totalCount}</span>
               <div className={styles.checkProgress}>
                 <div className={styles.checkProgressFill}
-                  style={{ width: totalCount > 0 ? `${Math.round((doneCount/totalCount)*100)}%` : '0%' }} />
+                  style={{ width:`${totalCount>0?Math.round((doneCount/totalCount)*100):0}%` }} />
               </div>
             </div>
           )}
@@ -191,21 +192,19 @@ export default function Editor({
           </div>
         </div>
 
-        {/* Tagovi */}
         {(note.tags || []).length > 0 && (
           <div className={styles.tags}>
             {note.tags.map(t => {
               const tag = TAGS[t]
               return tag ? (
                 <span key={t} className={styles.tag}
-                  style={{ background: tag.bg, color: tag.color }}>{tag.label}</span>
+                  style={{ background:tag.bg, color:tag.color }}>{tag.label}</span>
               ) : null
             })}
           </div>
         )}
       </div>
 
-      {/* Notifikacija dozvola */}
       {!notifGranted && (
         <div style={{ margin:'0 16px 10px', padding:'9px 12px',
           background:'var(--amber-bg)', border:'1px solid var(--amber-bd)',
@@ -214,17 +213,22 @@ export default function Editor({
           <span style={{ flex:1, color:'var(--amber)' }}>Dozvoli notifikacije za podsjetnike</span>
           <button onClick={async () => {
             try {
+              if (typeof Notification === 'undefined') return
+              if (Notification.permission === 'denied') {
+                alert('Notifikacije su blokirane. Idi u Settings browsera i dozvoli za ovu stranicu.')
+                return
+              }
               const ok = await requestPermission()
               setNotifGranted(ok)
-            } catch {}
+            } catch (e) { console.warn(e) }
           }} style={{ padding:'4px 10px', background:'var(--amber)', color:'#fff',
-            border:'none', borderRadius:6, fontSize:11, cursor:'pointer', fontWeight:500 }}>
+            border:'none', borderRadius:6, fontSize:11, cursor:'pointer',
+            fontWeight:500, fontFamily:"'DM Sans',sans-serif" }}>
             Dozvoli
           </button>
         </div>
       )}
 
-      {/* Reminder bar */}
       {note.reminder && !showReminder && (
         <div className={`${styles.reminderBar} ${hasUrgentReminder ? styles.reminderUrgent : ''}`}>
           <Bell size={13} />
@@ -246,20 +250,20 @@ export default function Editor({
 
       {showReminder && (
         <ReminderPanel reminder={note.reminder}
-          onSave={handleSaveReminder}
-          onClose={() => setShowReminder(false)} />
+          onSave={handleSaveReminder} onClose={() => setShowReminder(false)} />
       )}
-
       {showOCR && (
         <OCRCapture onSave={handleOCRSave} onClose={() => setShowOCR(false)} />
       )}
-
       {showConfirm && (
         <ConfirmModal
           title="Obriši bilješku?"
           message={`"${note.title}" će biti trajno obrisana.`}
           onConfirm={handleDeleteConfirmed}
           onCancel={() => setShowConfirm(false)} />
+      )}
+      {showShare && (
+        <ShareModal note={note} onClose={() => setShowShare(false)} />
       )}
     </div>
   )
