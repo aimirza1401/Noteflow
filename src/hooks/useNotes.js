@@ -101,18 +101,45 @@ export function useNotes(userId) {
 
   // ── CRUD ─────────────────────────────────────────────────────────────────
 
+  const updateTimers = useRef({})
+
   const updateNote = useCallback(async (id, changes) => {
     const ts = new Date().toISOString()
     const updated = { ...changes, updated_at: ts }
+
+    // Odmah ažuriraj lokalni state
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updated } : n))
-    const full = { ...notes.find(n => n.id === id), ...updated }
-    await saveNoteLocal(full).catch(() => {})
-    if (navigator.onLine) {
-      await supabase.from('notes').update(updated).eq('id', id)
-    } else {
-      await addToQueue({ type: 'update', noteId: id, data: updated }).catch(() => {})
-    }
-  }, [notes])
+
+    // Debounce Supabase update – čekaj 800ms bez novih promjena
+    if (updateTimers.current[id]) clearTimeout(updateTimers.current[id])
+    updateTimers.current[id] = setTimeout(async () => {
+      // Uzmi najsvježije stanje bilješke uključujući checklist
+      setNotes(prev => {
+        const fresh = prev.find(n => n.id === id)
+        if (!fresh) return prev
+        const fullUpdate = {
+          title:     fresh.title,
+          content:   fresh.content,
+          checklist: fresh.checklist,
+          tags:      fresh.tags,
+          starred:   fresh.starred,
+          reminder:  fresh.reminder,
+          folder:    fresh.folder,
+          updated_at: ts,
+        }
+        saveNoteLocal({ ...fresh, ...fullUpdate }).catch(() => {})
+        if (navigator.onLine) {
+          supabase.from('notes').update(fullUpdate).eq('id', id).catch(e => {
+            console.warn('Update failed, queuing:', e)
+            addToQueue({ type: 'update', noteId: id, data: fullUpdate }).catch(() => {})
+          })
+        } else {
+          addToQueue({ type: 'update', noteId: id, data: fullUpdate }).catch(() => {})
+        }
+        return prev
+      })
+    }, 800)
+  }, [])
 
   const toggleCheckItem = useCallback((noteId, itemId) => {
     setNotes(prev => {

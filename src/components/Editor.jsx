@@ -69,13 +69,23 @@ export default function Editor({
 
   // Sačuvaj odmah pri promjeni naslova ili sadržaja
   const handleTitleChange = (e) => {
-    updateNote(note.id, { title: e.target.value })
+    // Uvijek šalji checklist da se ne izgubi
+    updateNote(note.id, {
+      title:     e.target.value,
+      content:   note.content,
+      checklist: note.checklist,
+    })
     saveToHistory(note.id, { title: e.target.value, content: note.content, checklist: note.checklist })
     setHistoryCount(getHistory(note.id).length)
   }
 
   const handleContentChange = (e) => {
-    updateNote(note.id, { content: e.target.value })
+    // Uvijek šalji checklist da se ne izgubi
+    updateNote(note.id, {
+      title:     note.title,
+      content:   e.target.value,
+      checklist: note.checklist,
+    })
     saveToHistory(note.id, { title: note.title, content: e.target.value, checklist: note.checklist })
     setHistoryCount(getHistory(note.id).length)
   }
