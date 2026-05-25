@@ -7,22 +7,53 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'icons/*.png'],
       manifest: {
         name: 'NoteFlow',
         short_name: 'NoteFlow',
-        description: 'Minimalistički notes s podsjetnicima',
+        description: 'Minimalistički notes s podsjetnicima, zadacima i podsjetnicima',
         theme_color: '#2563eb',
         background_color: '#f7f6f3',
         display: 'standalone',
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        start_url: '/?source=pwa',
+        lang: 'bs',
+        categories: ['productivity', 'utilities'],
+        screenshots: [],
         icons: [
-          { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }
+          { src: '/icons/icon-72x72.png',   sizes: '72x72',   type: 'image/png' },
+          { src: '/icons/icon-96x96.png',   sizes: '96x96',   type: 'image/png' },
+          { src: '/icons/icon-128x128.png', sizes: '128x128', type: 'image/png' },
+          { src: '/icons/icon-144x144.png', sizes: '144x144', type: 'image/png' },
+          { src: '/icons/icon-152x152.png', sizes: '152x152', type: 'image/png' },
+          { src: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-384x384.png', sizes: '384x384', type: 'image/png' },
+          { src: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        shortcuts: [
+          {
+            name: 'Nova bilješka',
+            short_name: 'Nova',
+            description: 'Kreiraj novu bilješku',
+            url: '/?action=new-note',
+            icons: [{ src: '/icons/icon-96x96.png', sizes: '96x96' }],
+          },
+          {
+            name: 'Podsjetnici danas',
+            short_name: 'Danas',
+            description: 'Vidi podsjetnike za danas',
+            url: '/?view=danas',
+            icons: [{ src: '/icons/icon-96x96.png', sizes: '96x96' }],
+          },
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
@@ -30,7 +61,7 @@ export default defineConfig({
             options: {
               cacheName: 'supabase-cache',
               networkTimeoutSeconds: 5,
-              expiration: { maxEntries: 100, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -39,8 +70,17 @@ export default defineConfig({
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'google-fonts-cache' },
           },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'gstatic-fonts-cache',
+              expiration: { maxEntries: 10, maxAgeSeconds: 365 * 24 * 60 * 60 },
+            },
+          },
         ],
       },
+      devOptions: { enabled: false },
     }),
   ],
 })

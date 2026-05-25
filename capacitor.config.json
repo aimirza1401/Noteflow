@@ -1,0 +1,20 @@
+{
+  "appId": "com.aimirza.noteflow",
+  "appName": "NoteFlow",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#f7f6f3",
+      "showSpinner": false
+    }
+  }
+}

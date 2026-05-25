@@ -10,6 +10,7 @@ import Editor from './components/Editor'
 import Login from './components/Login'
 import LanguagePicker from './components/LanguagePicker'
 import Onboarding from './components/Onboarding'
+import InstallBanner from './components/InstallBanner'
 import SharedNote from './components/SharedNote'
 
 function useIsMobile() {
@@ -141,6 +142,13 @@ function NoteApp({ userId, userEmail }) {
     try { localStorage.setItem('nf_lang', lang) } catch {}
   }
   const handleSelectNote  = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
+
+  // PWA shortcuts handler
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('action') === 'new-note') { handleCreateNote(); window.history.replaceState({}, '', '/') }
+    if (params.get('view') === 'danas') { handleSetView('danas'); window.history.replaceState({}, '', '/') }
+  }, [])
   const handleCreateNote  = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
   const handleSetView     = (v) => { setView(v); if (isMobile) setActiveTab('list') }
   const todayCount = notes.filter(n => n.reminder && n.reminder.date === today).length
@@ -332,6 +340,7 @@ function NoteApp({ userId, userEmail }) {
           </div>
         )}
 
+        <InstallBanner />
         <BottomNav view={view} setView={handleSetView}
           activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
