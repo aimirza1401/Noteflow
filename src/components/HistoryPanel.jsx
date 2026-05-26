@@ -3,13 +3,34 @@ import { X, Clock, RotateCcw } from 'lucide-react'
 
 const MAX_HISTORY = 20
 
-export function saveToHistory(noteId, snapshot) {
+export function saveToHistory(noteId, snapshot, force = false) {
   try {
     const key = `nf_history_${noteId}`
     const existing = JSON.parse(localStorage.getItem(key) || '[]')
     const last = existing[0]
-    // Ne čuvaj ako nije bilo promjene
-    if (last && last.content === snapshot.content && last.title === snapshot.title) return
+
+    if (!force) {
+      // Ne čuvaj ako nema promjene
+      if (last && last.content === snapshot.content && last.title === snapshot.title) return
+
+      // Sačuvaj samo značajne promjene:
+      // - promjena naslova
+      // - dodavanje/brisanje zadatka
+      // - sadržaj se promijenio za više od 50 znakova
+      // - prošlo je više od 5 minuta od zadnjeg čuvanja
+      const titleChanged = last && last.title !== snapshot.title
+      const checklistChanged = last && JSON.stringify(last.checklist) !== JSON.stringify(snapshot.checklist)
+      const contentDiff = last
+        ? Math.abs((snapshot.content || '').length - (last.content || '').length)
+        : 999
+      const timePassed = last
+        ? (Date.now() - new Date(last.savedAt).getTime()) > 5 * 60 * 1000
+        : true
+
+      const isSignificant = titleChanged || checklistChanged || contentDiff > 50 || timePassed
+      if (!isSignificant) return
+    }
+
     const updated = [{ ...snapshot, savedAt: new Date().toISOString() }, ...existing]
       .slice(0, MAX_HISTORY)
     localStorage.setItem(key, JSON.stringify(updated))
