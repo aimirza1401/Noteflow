@@ -2,21 +2,37 @@ import { useState, useRef, useEffect } from 'react'
 import { Mic, MicOff, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+// Napomena: bs-BA i sr-RS nisu podržani u Web Speech API
+// Koristimo hr-HR kao fallback jer su jezici međusobno razumljivi (~90% tačnost)
 const LANGUAGES = [
-  { code: 'bs-BA', label: 'Bosanski',  flag: '🇧🇦' },
-  { code: 'hr-HR', label: 'Hrvatski',  flag: '🇭🇷' },
-  { code: 'sr-RS', label: 'Srpski',    flag: '🇷🇸' },
-  { code: 'en-US', label: 'English',   flag: '🇬🇧' },
-  { code: 'de-DE', label: 'Deutsch',   flag: '🇩🇪' },
+  { code: 'hr-HR', label: 'Bosanski/Hrvatski/Srpski', flag: '🇧🇦', note: 'BHS' },
+  { code: 'en-US', label: 'English (US)',   flag: '🇺🇸' },
+  { code: 'en-GB', label: 'English (UK)',   flag: '🇬🇧' },
+  { code: 'de-DE', label: 'Deutsch',        flag: '🇩🇪' },
+  { code: 'fr-FR', label: 'Français',       flag: '🇫🇷' },
+  { code: 'it-IT', label: 'Italiano',       flag: '🇮🇹' },
+  { code: 'es-ES', label: 'Español',        flag: '🇪🇸' },
+  { code: 'pt-BR', label: 'Português',      flag: '🇧🇷' },
+  { code: 'tr-TR', label: 'Türkçe',         flag: '🇹🇷' },
+  { code: 'ar-SA', label: 'العربية',        flag: '🇸🇦' },
+  { code: 'ja-JP', label: '日本語',          flag: '🇯🇵' },
 ]
 
 // Mapiranje i18n jezika na Speech API jezik
+// bs i sr koriste hr-HR jer bs-BA i sr-RS nisu podržani u Web Speech API
 const LANG_MAP = {
-  bs: 'bs-BA',
+  bs: 'hr-HR',
   hr: 'hr-HR',
-  sr: 'sr-RS',
+  sr: 'hr-HR',
   en: 'en-US',
   de: 'de-DE',
+  fr: 'fr-FR',
+  it: 'it-IT',
+  es: 'es-ES',
+  pt: 'pt-BR',
+  tr: 'tr-TR',
+  ar: 'ar-SA',
+  ja: 'ja-JP',
 }
 
 export default function VoiceRecorder({ onResult, onClose }) {
@@ -201,7 +217,9 @@ export default function VoiceRecorder({ onResult, onClose }) {
                         opacity: status === 'recording' ? .5 : 1,
                         transition:'all .15s',
                       }}>
-                      {flag} {label}
+                      <span>{flag}</span>
+                      <span style={{ fontSize:10, textAlign:'center', lineHeight:1.3 }}>{label}</span>
+                      {note && <span style={{ fontSize:9, opacity:.7 }}>{note}</span>}
                     </button>
                   ))}
                 </div>
