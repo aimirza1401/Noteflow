@@ -45,7 +45,6 @@ export default function App() {
     try { return !!localStorage.getItem('nf_onboarding_done') } catch { return false }
   })
 
-  // Check if this is a share link
   const shareId = window.location.pathname.startsWith('/share/')
     ? window.location.pathname.split('/share/')[1]
     : null
@@ -59,16 +58,9 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Public share page – no auth needed
   if (shareId) return <SharedNote shareId={shareId} />
-
-  // Language picker – first time only
   if (!langChosen) return <LanguagePicker onDone={() => setLangChosen(true)} />
-
-  // Onboarding – after language, before login
-  if (!onboardingDone) return (
-    <Onboarding lang={i18n.language} onDone={() => setOnboardingDone(true)} />
-  )
+  if (!onboardingDone) return <Onboarding lang={i18n.language} onDone={() => setOnboardingDone(true)} />
 
   if (session === undefined) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
@@ -123,9 +115,9 @@ function BottomNav({ view, setView, activeTab, setActiveTab }) {
 
 function NoteApp({ userId, userEmail }) {
   const { t, i18n } = useTranslation()
-  const { dark, setDark } = useTheme()
-  const isMobile  = useIsMobile()
-  const isOnline  = useOnline()
+  const { theme, setTheme, dark, setDark } = useTheme()
+  const isMobile = useIsMobile()
+  const isOnline = useOnline()
   const [activeTab, setActiveTab] = useState('list')
   const today = new Date().toISOString().split('T')[0]
 
@@ -141,16 +133,17 @@ function NoteApp({ userId, userEmail }) {
     i18n.changeLanguage(lang)
     try { localStorage.setItem('nf_lang', lang) } catch {}
   }
-  const handleSelectNote  = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
 
-  // PWA shortcuts handler
+  const handleSelectNote = (id) => { setActiveId(id); if (isMobile) setActiveTab('editor') }
+  const handleCreateNote = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
+  const handleSetView    = (v) => { setView(v); if (isMobile) setActiveTab('list') }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('action') === 'new-note') { handleCreateNote(); window.history.replaceState({}, '', '/') }
     if (params.get('view') === 'danas') { handleSetView('danas'); window.history.replaceState({}, '', '/') }
   }, [])
-  const handleCreateNote  = async () => { await createNote(); if (isMobile) setActiveTab('editor') }
-  const handleSetView     = (v) => { setView(v); if (isMobile) setActiveTab('list') }
+
   const todayCount = notes.filter(n => n.reminder && n.reminder.date === today).length
 
   if (loading) return (
@@ -161,7 +154,6 @@ function NoteApp({ userId, userEmail }) {
     </div>
   )
 
-  // ── MOBILE ──
   if (isMobile) {
     return (
       <div style={{ height:'100vh', background:'var(--bg)',
@@ -170,7 +162,7 @@ function NoteApp({ userId, userEmail }) {
         {!isOnline && (
           <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
             fontSize:12, display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-            <span>📵</span> Offline mod – bilješke se čuvaju lokalno
+            <span>📵</span> Offline mod
           </div>
         )}
         {isOnline && syncing && (
@@ -291,19 +283,27 @@ function NoteApp({ userId, userEmail }) {
               ))}
             </div>
             <div style={{ margin:'0 16px 12px', background:'var(--surface)',
-              borderRadius:16, padding:'14px 16px', border:'1px solid var(--border)',
-              display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <span style={{ fontSize:20 }}>{dark ? '🌙' : '☀️'}</span>
-                <span style={{ fontSize:14, color:'var(--text-1)' }}>{t('darkMode')}</span>
-              </div>
-              <div onClick={() => setDark(v => !v)} style={{
-                width:48, height:26, borderRadius:13, cursor:'pointer',
-                background: dark ? 'var(--blue)' : 'var(--border)', position:'relative',
-                transition:'background .2s' }}>
-                <div style={{ position:'absolute', top:3, left: dark ? 25 : 3,
-                  width:20, height:20, borderRadius:10, background:'#fff',
-                  transition:'left .2s', boxShadow:'0 1px 4px rgba(0,0,0,.2)' }} />
+              borderRadius:16, padding:'14px 16px', border:'1px solid var(--border)' }}>
+              <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:10,
+                fontWeight:500, textTransform:'uppercase', letterSpacing:'.06em' }}>Tema</div>
+              <div style={{ display:'flex', gap:8 }}>
+                {[
+                  { id:'light', icon:'☀️', label:'Svjetla' },
+                  { id:'dark',  icon:'🌙', label:'Tamna'   },
+                  { id:'wc26',  icon:'⚽', label:'WC 2026' },
+                ].map(({ id, icon, label }) => (
+                  <button key={id} onClick={() => setTheme(id)} style={{
+                    flex:1, padding:'10px 6px', borderRadius:12, cursor:'pointer',
+                    border:`2px solid ${theme===id?'var(--blue)':'var(--border)'}`,
+                    background: theme===id ? 'var(--blue-bg)' : 'transparent',
+                    color: theme===id ? 'var(--blue)' : 'var(--text-2)',
+                    fontFamily:"'DM Sans',sans-serif", fontSize:11, fontWeight:500,
+                    display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+                  }}>
+                    <span style={{ fontSize:22 }}>{icon}</span>
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
             <div style={{ margin:'0 16px 16px', background:'var(--surface)',
@@ -312,21 +312,33 @@ function NoteApp({ userId, userEmail }) {
                 fontWeight:500, textTransform:'uppercase', letterSpacing:'.06em' }}>
                 {t('chooseLanguage')}
               </div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:6 }}>
                 {[
-                  { code:'bs', label:'Bosanski', flag:'🇧🇦' },
-                  { code:'hr', label:'Hrvatski', flag:'🇭🇷' },
-                  { code:'sr', label:'Srpski',   flag:'🇷🇸' },
-                  { code:'en', label:'English',  flag:'🇬🇧' },
-                  { code:'de', label:'Deutsch',  flag:'🇩🇪' },
+                  { code:'bs', label:'Bosanski',  flag:'🇧🇦' },
+                  { code:'hr', label:'Hrvatski',  flag:'🇭🇷' },
+                  { code:'sr', label:'Srpski',    flag:'🇷🇸' },
+                  { code:'en', label:'English',   flag:'🇬🇧' },
+                  { code:'de', label:'Deutsch',   flag:'🇩🇪' },
+                  { code:'fr', label:'Français',  flag:'🇫🇷' },
+                  { code:'it', label:'Italiano',  flag:'🇮🇹' },
+                  { code:'es', label:'Español',   flag:'🇪🇸' },
+                  { code:'tr', label:'Türkçe',    flag:'🇹🇷' },
+                  { code:'pt', label:'Português', flag:'🇧🇷' },
+                  { code:'ar', label:'العربية',   flag:'🇸🇦' },
+                  { code:'ja', label:'日本語',     flag:'🇯🇵' },
                 ].map(({ code, label, flag }) => (
                   <button key={code} onClick={() => changeLanguage(code)} style={{
-                    padding:'7px 14px', borderRadius:20, fontSize:13, cursor:'pointer',
+                    padding:'8px 4px', borderRadius:10, cursor:'pointer',
                     border:`1.5px solid ${i18n.language===code?'var(--blue)':'var(--border)'}`,
                     background: i18n.language===code ? 'var(--blue-bg)' : 'transparent',
                     color: i18n.language===code ? 'var(--blue)' : 'var(--text-2)',
-                    fontFamily:"'DM Sans',sans-serif", fontWeight: i18n.language===code?500:400,
-                  }}>{flag} {label}</button>
+                    fontFamily:"'DM Sans',sans-serif",
+                    display:'flex', flexDirection:'column', alignItems:'center', gap:3,
+                  }}>
+                    <span style={{ fontSize:20 }}>{flag}</span>
+                    <span style={{ fontSize:10, fontWeight: i18n.language===code?500:400,
+                      textAlign:'center', lineHeight:1.2 }}>{label}</span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -347,19 +359,12 @@ function NoteApp({ userId, userEmail }) {
     )
   }
 
-  // ── DESKTOP ──
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100vh', overflow:'hidden', background:'var(--bg)' }}>
       {!isOnline && (
         <div style={{ background:'#1a1916', color:'#f0ede8', padding:'7px 16px',
           fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
-          <span>📵</span> Offline mod – bilješke se čuvaju lokalno i sinhronizuju kad se vratiš online
-        </div>
-      )}
-      {isOnline && syncing && (
-        <div style={{ background:'var(--blue-bg)', color:'var(--blue)', padding:'6px 16px',
-          fontSize:12, display:'flex', alignItems:'center', gap:8 }}>
-          <span>🔄</span> Sinhronizujem promjene...
+          <span>📵</span> Offline mod
         </div>
       )}
       <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
