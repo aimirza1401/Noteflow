@@ -24,6 +24,15 @@ i18n
     lng: saved,
     fallbackLng: 'bs',
     interpolation: { escapeValue: false },
+
+    saveMissing: true,
+    missingKeyHandler: (lngs, ns, key) => {
+      console.warn(`[i18n] ⚠️ Nedostaje ključ: "${key}" za jezike: ${lngs.join(', ')}`)
+    },
+    parseMissingKeyHandler: (key) => {
+      // Vraća ključ kao tekst umjesto praznine
+      return key
+    },
   })
 
 export default i18n
