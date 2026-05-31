@@ -8,6 +8,13 @@ const LANGS = [
   { code:'sr', flag:'🇷🇸' },
   { code:'en', flag:'🇬🇧' },
   { code:'de', flag:'🇩🇪' },
+  { code:'fr', flag:'🇫🇷' },
+  { code:'it', flag:'🇮🇹' },
+  { code:'es', flag:'🇪🇸' },
+  { code:'tr', flag:'🇹🇷' },
+  { code:'pt', flag:'🇧🇷' },
+  { code:'ar', flag:'🇸🇦' },
+  { code:'ja', flag:'🇯🇵' },
 ]
 
 export default function Sidebar({ view, setView, search, setSearch, notes, createNote,
