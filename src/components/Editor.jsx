@@ -145,6 +145,19 @@ export default function Editor({
     setExporting(false)
   }
 
+const handleExportMarkdown = () => {
+  const checklistMd = checklist.length
+    ? '\n\n## Zadaci\n' + checklist.map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`).join('\n')
+    : ''
+  const content = `# ${note.title || 'Bilješka'}\n\n> ${formatDate(note.updatedAt || note.updated_at)}\n\n${plainContent}${checklistMd}`
+  const blob = new Blob([content], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${(note.title || 'biljeska').replace(/\s+/g, '-').toLowerCase()}.md`
+  a.click()
+  URL.revokeObjectURL(url)
+}
   const checklist  = note.checklist || []
   const doneCount  = checklist.filter(c => c.done).length
   const totalCount = checklist.length
@@ -192,6 +205,11 @@ export default function Editor({
           <Download size={14} />
           <span style={{ fontSize:11 }}>{exporting ? '...' : 'PDF'}</span>
         </button>
+	<button className={styles.tbBtn} onClick={handleExportMarkdown}
+  	title="Export kao Markdown" style={{ display:'flex', alignItems:'center', gap:4 }}>
+  	<Download size={14} />
+  	<span style={{ fontSize:11 }}>MD</span>
+	</button>
 
         <button className={styles.tbBtn} onClick={() => setShowShare(true)}
           title="Dijeli" style={{ display:'flex', alignItems:'center', gap:4 }}>

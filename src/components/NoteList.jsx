@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Star, MoreVertical, Bell } from 'lucide-react'
 
@@ -52,6 +53,19 @@ const FILTERS = [
 
 export default function NoteList({ notes, activeId, setActiveId, view, setView, allNotes }) {
   const { t } = useTranslation()
+  const [sortBy, setSortBy] = useState('date_desc')
+
+  const sortedNotes = [...notes].sort((a, b) => {
+    switch (sortBy) {
+      case 'date_asc':  return new Date(a.updated_at||a.updatedAt) - new Date(b.updated_at||b.updatedAt)
+      case 'title_asc': return (a.title||'').localeCompare(b.title||'')
+      case 'title_desc':return (b.title||'').localeCompare(a.title||'')
+      default:          return new Date(b.updated_at||b.updatedAt) - new Date(a.updated_at||a.updatedAt)
+    }
+  })
+
+  const recentNotes = sortedNotes.slice(0, 3)
+  const olderNotes  = sortedNotes.slice(3)
 
   const counts = {
     sve:       allNotes.length,
@@ -61,9 +75,6 @@ export default function NoteList({ notes, activeId, setActiveId, view, setView, 
     projekti:  allNotes.filter(n => n.folder === 'projekti').length,
     licno:     allNotes.filter(n => n.folder === 'licno').length,
   }
-
-  const recentNotes  = notes.slice(0, 3)
-  const olderNotes   = notes.slice(3)
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%',
@@ -93,6 +104,23 @@ export default function NoteList({ notes, activeId, setActiveId, view, setView, 
             )}
           </button>
         ))}
+      </div>
+
+      {/* Sort dropdown */}
+      <div style={{ padding:'8px 16px 0', display:'flex', justifyContent:'flex-end' }}>
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          style={{
+            fontSize:12, color:'var(--text-2)', background:'var(--surface)',
+            border:'1px solid var(--border)', borderRadius:8, padding:'4px 8px',
+            fontFamily:"'DM Sans',sans-serif", cursor:'pointer', outline:'none',
+          }}>
+          <option value="date_desc">Najnovije</option>
+          <option value="date_asc">Najstarije</option>
+          <option value="title_asc">Naslov A→Z</option>
+          <option value="title_desc">Naslov Z→A</option>
+        </select>
       </div>
 
       {/* Note list */}
