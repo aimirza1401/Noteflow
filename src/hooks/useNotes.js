@@ -113,26 +113,23 @@ export function useNotes(userId) {
     // Debounce Supabase update – čekaj 800ms bez novih promjena
     if (updateTimers.current[id]) clearTimeout(updateTimers.current[id])
     updateTimers.current[id] = setTimeout(async () => {
-      // Uzmi najsvježije stanje bilješke uključujući checklist
       setNotes(prev => {
         const fresh = prev.find(n => n.id === id)
         if (!fresh) return prev
         const fullUpdate = {
-          title:     fresh.title,
-          content:   fresh.content,
-          checklist: fresh.checklist,
-          tags:      fresh.tags,
-          starred:   fresh.starred,
-          reminder:  fresh.reminder,
-          folder:    fresh.folder,
-          updated_at: ts,
+          title:      fresh.title,
+          content:    fresh.content,
+          checklist:  fresh.checklist,
+          tags:       fresh.tags,
+          starred:    fresh.starred,
+          reminder:   fresh.reminder,
+          folder:     fresh.folder,
+          updated_at: new Date().toISOString(),
         }
         saveNoteLocal({ ...fresh, ...fullUpdate }).catch(() => {})
         if (navigator.onLine) {
-          supabase.from('notes').update(fullUpdate).eq('id', id).catch(e => {
-            console.warn('Update failed, queuing:', e)
-            addToQueue({ type: 'update', noteId: id, data: fullUpdate }).catch(() => {})
-          })
+          supabase.from('notes').update(fullUpdate).eq('id', id)
+            .then(({ error }) => { if (error) console.error('updateNote:', error) })
         } else {
           addToQueue({ type: 'update', noteId: id, data: fullUpdate }).catch(() => {})
         }
@@ -147,12 +144,14 @@ export function useNotes(userId) {
       if (!note) return prev
       const checklist = note.checklist.map(c =>
         c.id === itemId ? { ...c, done: !c.done } : c)
-      const updated = { ...note, checklist }
+      const updated = { ...note, checklist, updated_at: new Date().toISOString() }
       saveNoteLocal(updated).catch(() => {})
       if (navigator.onLine)
-        supabase.from('notes').update({ checklist }).eq('id', noteId)
+        supabase.from('notes').update({ checklist, updated_at: updated.updated_at })
+          .eq('id', noteId)
+          .then(({ error }) => { if (error) console.error('toggleCheckItem:', error) })
       else
-        addToQueue({ type:'update', noteId, data:{ checklist } }).catch(() => {})
+        addToQueue({ type: 'update', noteId, data: { checklist } }).catch(() => {})
       return prev.map(n => n.id === noteId ? updated : n)
     })
   }, [])
@@ -163,12 +162,14 @@ export function useNotes(userId) {
       if (!note) return prev
       const item = { id: 'c' + Date.now(), text, done: false }
       const checklist = [...(note.checklist || []), item]
-      const updated = { ...note, checklist }
+      const updated = { ...note, checklist, updated_at: new Date().toISOString() }
       saveNoteLocal(updated).catch(() => {})
       if (navigator.onLine)
-        supabase.from('notes').update({ checklist }).eq('id', noteId)
+        supabase.from('notes').update({ checklist, updated_at: updated.updated_at })
+          .eq('id', noteId)
+          .then(({ error }) => { if (error) console.error('addCheckItem:', error) })
       else
-        addToQueue({ type:'update', noteId, data:{ checklist } }).catch(() => {})
+        addToQueue({ type: 'update', noteId, data: { checklist } }).catch(() => {})
       return prev.map(n => n.id === noteId ? updated : n)
     })
   }, [])
@@ -178,12 +179,14 @@ export function useNotes(userId) {
       const note = prev.find(n => n.id === noteId)
       if (!note) return prev
       const checklist = note.checklist.filter(c => c.id !== itemId)
-      const updated = { ...note, checklist }
+      const updated = { ...note, checklist, updated_at: new Date().toISOString() }
       saveNoteLocal(updated).catch(() => {})
       if (navigator.onLine)
-        supabase.from('notes').update({ checklist }).eq('id', noteId)
+        supabase.from('notes').update({ checklist, updated_at: updated.updated_at })
+          .eq('id', noteId)
+          .then(({ error }) => { if (error) console.error('deleteCheckItem:', error) })
       else
-        addToQueue({ type:'update', noteId, data:{ checklist } }).catch(() => {})
+        addToQueue({ type: 'update', noteId, data: { checklist } }).catch(() => {})
       return prev.map(n => n.id === noteId ? updated : n)
     })
   }, [])
@@ -238,6 +241,7 @@ export function useNotes(userId) {
       saveNoteLocal(updated).catch(() => {})
       if (navigator.onLine)
         supabase.from('notes').update({ starred }).eq('id', id)
+          .then(({ error }) => { if (error) console.error('toggleStar:', error) })
       else
         addToQueue({ type:'update', noteId: id, data:{ starred } }).catch(() => {})
       return prev.map(n => n.id === id ? updated : n)
@@ -254,6 +258,7 @@ export function useNotes(userId) {
     })
     if (navigator.onLine)
       await supabase.from('notes').update({ reminder }).eq('id', id)
+        .then(({ error }) => { if (error) console.error('setReminder:', error) })
     else
       await addToQueue({ type:'update', noteId: id, data:{ reminder } }).catch(() => {})
   }, [])
