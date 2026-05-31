@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { Search, BookOpen, Bell, CheckSquare, Star, Folder, Plus, LogOut, Moon, Sun } from 'lucide-react'
+import { Search, BookOpen, Bell, CheckSquare, Star, Folder, Plus, LogOut } from 'lucide-react'
+import { useTheme } from '../ThemeContext'
 import styles from './Sidebar.module.css'
 
 const LANGS = [
@@ -17,9 +18,16 @@ const LANGS = [
   { code:'ja', flag:'🇯🇵' },
 ]
 
+const THEMES = [
+  { id:'light', icon:'☀️' },
+  { id:'dark',  icon:'🌙' },
+  { id:'wc26',  icon:'⚽' },
+]
+
 export default function Sidebar({ view, setView, search, setSearch, notes, createNote,
   userEmail, onLogout, dark, setDark, currentLang, onLangChange }) {
   const { t } = useTranslation()
+  const { theme, setTheme } = useTheme()
   const today = new Date().toISOString().split('T')[0]
 
   const counts = {
@@ -50,13 +58,17 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
         <div className={styles.logo}>
           <div className={styles.logoIcon}><BookOpen size={15} /></div>
           <span className={styles.logoName}>NoteFlow</span>
-          <button onClick={() => setDark(v => !v)} style={{
-            marginLeft:'auto', background:'transparent', border:'none',
-            color:'var(--text-3)', cursor:'pointer', padding:4,
-            borderRadius:6, display:'flex', alignItems:'center',
-          }} title={t('darkMode')}>
-            {dark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
+          {/* Theme selector */}
+          <div style={{ marginLeft:'auto', display:'flex', gap:2 }}>
+            {THEMES.map(({ id, icon }) => (
+              <button key={id} onClick={() => setTheme(id)} title={id} style={{
+                background: theme === id ? 'var(--blue-bg)' : 'transparent',
+                border: `1px solid ${theme === id ? 'var(--blue-bd)' : 'transparent'}`,
+                borderRadius:6, padding:'3px 5px', cursor:'pointer', fontSize:13,
+                lineHeight:1,
+              }}>{icon}</button>
+            ))}
+          </div>
         </div>
         <div className={styles.searchWrap}>
           <Search size={13} className={styles.searchIcon} />
