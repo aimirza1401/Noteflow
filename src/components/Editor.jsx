@@ -11,7 +11,6 @@ import { requestPermission, scheduleNotification, cancelNotification } from '../
 import { exportNoteToPDF } from '../exportPDF'
 import styles from './Editor.module.css'
 
-// Auto-save historija svakih 30s dok se edituje
 const HISTORY_INTERVAL = 30000
 
 function formatDate(iso) {
@@ -44,13 +43,26 @@ export default function Editor({
   const histTimerRef = useRef(null)
   const lastNoteId   = useRef(null)
 
-  if (!note) return null
-
+  // ── Hooks moraju biti PRIJE bilo kojeg early return ───────────────────────
   const today = new Date().toISOString().split('T')[0]
-  const hasUrgentReminder = note.reminder && note.reminder.date === today
+  const hasUrgentReminder = note?.reminder && note.reminder.date === today
 
-  // Auto-save historija
+  const checklist   = note?.checklist || []
+  const doneCount   = checklist.filter(c => c.done).length
+  const totalCount  = checklist.length
+
+  const plainContent = (() => {
+    try {
+      if (!note?.content) return ''
+      if (!note.content.includes('<')) return note.content
+      const div = document.createElement('div')
+      div.innerHTML = note.content
+      return div.innerText || div.textContent || ''
+    } catch { return note?.content || '' }
+  })()
+
   useEffect(() => {
+    if (!note) return
     if (lastNoteId.current !== note.id) {
       lastNoteId.current = note.id
       setHistoryCount(getHistory(note.id).length)
@@ -65,11 +77,13 @@ export default function Editor({
       setHistoryCount(getHistory(note.id).length)
     }, HISTORY_INTERVAL)
     return () => clearInterval(histTimerRef.current)
-  }, [note.id, note.title, note.content, note.checklist])
+  }, [note?.id, note?.title, note?.content, note?.checklist])
 
-  // Sačuvaj odmah pri promjeni naslova ili sadržaja
+  // ── Early return POSLIJE svih hooka ──────────────────────────────────────
+  if (!note) return null
+
+  // ── Handleri ─────────────────────────────────────────────────────────────
   const handleTitleChange = (e) => {
-    // Uvijek šalji checklist da se ne izgubi
     updateNote(note.id, {
       title:     e.target.value,
       content:   note.content,
@@ -80,7 +94,6 @@ export default function Editor({
   }
 
   const handleContentChange = (e) => {
-    // Uvijek šalji checklist da se ne izgubi
     updateNote(note.id, {
       title:     note.title,
       content:   e.target.value,
@@ -106,7 +119,7 @@ export default function Editor({
       return (div.innerText || div.textContent || '').trim()
     })()
     const combined = current ? current + '\n\n' + text : text
-    updateNote(note.id, { content: combined })
+    updateNote(note.id, { content: combined, title: note.title, checklist: note.checklist })
     saveToHistory(note.id, { title: note.title, content: combined, checklist: note.checklist })
   }
 
@@ -145,32 +158,19 @@ export default function Editor({
     setExporting(false)
   }
 
-const handleExportMarkdown = () => {
-  const checklistMd = checklist.length
-    ? '\n\n## Zadaci\n' + checklist.map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`).join('\n')
-    : ''
-  const content = `# ${note.title || 'Bilješka'}\n\n> ${formatDate(note.updatedAt || note.updated_at)}\n\n${plainContent}${checklistMd}`
-  const blob = new Blob([content], { type: 'text/markdown' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${(note.title || 'biljeska').replace(/\s+/g, '-').toLowerCase()}.md`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-  const checklist  = note.checklist || []
-  const doneCount  = checklist.filter(c => c.done).length
-  const totalCount = checklist.length
-
-  const plainContent = (() => {
-    try {
-      if (!note.content) return ''
-      if (!note.content.includes('<')) return note.content
-      const div = document.createElement('div')
-      div.innerHTML = note.content
-      return div.innerText || div.textContent || ''
-    } catch { return note.content || '' }
-  })()
+  const handleExportMarkdown = () => {
+    const checklistMd = checklist.length
+      ? '\n\n## Zadaci\n' + checklist.map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`).join('\n')
+      : ''
+    const mdContent = `# ${note.title || 'Bilješka'}\n\n> ${formatDate(note.updatedAt || note.updated_at)}\n\n${plainContent}${checklistMd}`
+    const blob = new Blob([mdContent], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(note.title || 'biljeska').replace(/\s+/g, '-').toLowerCase()}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className={styles.editor}>
@@ -205,11 +205,12 @@ const handleExportMarkdown = () => {
           <Download size={14} />
           <span style={{ fontSize:11 }}>{exporting ? '...' : 'PDF'}</span>
         </button>
-	<button className={styles.tbBtn} onClick={handleExportMarkdown}
-  	title="Export kao Markdown" style={{ display:'flex', alignItems:'center', gap:4 }}>
-  	<Download size={14} />
-  	<span style={{ fontSize:11 }}>MD</span>
-	</button>
+
+        <button className={styles.tbBtn} onClick={handleExportMarkdown}
+          title="Export kao Markdown" style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <Download size={14} />
+          <span style={{ fontSize:11 }}>MD</span>
+        </button>
 
         <button className={styles.tbBtn} onClick={() => setShowShare(true)}
           title="Dijeli" style={{ display:'flex', alignItems:'center', gap:4 }}>
