@@ -12,6 +12,7 @@ import LanguagePicker from './components/LanguagePicker'
 import Onboarding from './components/Onboarding'
 import InstallBanner from './components/InstallBanner'
 import SharedNote from './components/SharedNote'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -69,7 +70,11 @@ export default function App() {
   )
 
   if (!session) return <Login />
-  return <NoteApp userId={session.user.id} userEmail={session.user.email} />
+return (
+  <ErrorBoundary>
+    <NoteApp userId={session.user.id} userEmail={session.user.email} />
+  </ErrorBoundary>
+)
 }
 
 const BOTTOM_NAV_KEYS = [
