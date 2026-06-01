@@ -2,10 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { Mic, MicOff, Square, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-// Napomena: bs-BA i sr-RS nisu podržani u Web Speech API
-// Koristimo hr-HR kao fallback jer su jezici međusobno razumljivi (~90% tačnost)
 const LANGUAGES = [
-  { code: 'hr-HR', label: 'Bosanski/Hrvatski/Srpski', flag: '🇧🇦', note: 'BHS' },
+  { code: 'hr-HR', label: 'Bosanski/Hrvatski/Srpski', flag: '🇧🇦', langNote: 'BHS' },
   { code: 'en-US', label: 'English (US)',   flag: '🇺🇸' },
   { code: 'en-GB', label: 'English (UK)',   flag: '🇬🇧' },
   { code: 'de-DE', label: 'Deutsch',        flag: '🇩🇪' },
@@ -18,8 +16,6 @@ const LANGUAGES = [
   { code: 'ja-JP', label: '日本語',          flag: '🇯🇵' },
 ]
 
-// Mapiranje i18n jezika na Speech API jezik
-// bs i sr koriste hr-HR jer bs-BA i sr-RS nisu podržani u Web Speech API
 const LANG_MAP = {
   bs: 'hr-HR',
   hr: 'hr-HR',
@@ -37,7 +33,7 @@ const LANG_MAP = {
 
 export default function VoiceRecorder({ onResult, onClose }) {
   const { i18n } = useTranslation()
-  const defaultLang = LANG_MAP[i18n.language] || 'bs-BA'
+  const defaultLang = LANG_MAP[i18n.language] || 'hr-HR'
 
   const [status,     setStatus]     = useState('idle')
   const [transcript, setTranscript] = useState('')
@@ -87,7 +83,6 @@ export default function VoiceRecorder({ onResult, onClose }) {
 
     r.onend = () => {
       if (statusRef.current === 'recording') {
-        // Automatski restart ako se prekinulo (mobilni browser)
         try { r.start() } catch {}
       }
     }
@@ -131,7 +126,6 @@ export default function VoiceRecorder({ onResult, onClose }) {
 
   const handleLangChange = (lang) => {
     setSelLang(lang)
-    // Ako snimamo, restartaj s novim jezikom
     if (status === 'recording') {
       try { recogRef.current?.stop() } catch {}
       clearInterval(timerRef.current)
@@ -204,7 +198,7 @@ export default function VoiceRecorder({ onResult, onClose }) {
                   Jezik govora
                 </div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {LANGUAGES.map(({ code, label, flag }) => (
+                  {LANGUAGES.map(({ code, label, flag, langNote }) => (
                     <button key={code} onClick={() => handleLangChange(code)}
                       disabled={status === 'recording'}
                       style={{
@@ -216,10 +210,11 @@ export default function VoiceRecorder({ onResult, onClose }) {
                         fontWeight: selLang===code ? 500 : 400,
                         opacity: status === 'recording' ? .5 : 1,
                         transition:'all .15s',
+                        display:'flex', alignItems:'center', gap:4,
                       }}>
                       <span>{flag}</span>
                       <span style={{ fontSize:10, textAlign:'center', lineHeight:1.3 }}>{label}</span>
-                      {note && <span style={{ fontSize:9, opacity:.7 }}>{note}</span>}
+                      {langNote && <span style={{ fontSize:9, opacity:.7 }}>{langNote}</span>}
                     </button>
                   ))}
                 </div>
@@ -265,7 +260,6 @@ export default function VoiceRecorder({ onResult, onClose }) {
                   </div>
                 </div>
 
-                {/* Status tekst */}
                 {status === 'idle' && (
                   <div style={{ textAlign:'center' }}>
                     <div style={{ fontSize:13, color:'var(--text-2)', marginBottom:2 }}>
