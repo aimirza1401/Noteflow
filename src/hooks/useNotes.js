@@ -17,7 +17,6 @@ export function useNotes(userId) {
 
   useEffect(() => { activeRef.current = activeId }, [activeId])
 
-  // ── Sync queue kad dođe internet ─────────────────────────────────────────
   const syncQueue = useCallback(async () => {
     const queue = await getQueue()
     if (queue.length === 0) return
@@ -42,13 +41,11 @@ export function useNotes(userId) {
     return () => window.removeEventListener('online', handler)
   }, [syncQueue])
 
-  // ── Load ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) return
     setLoading(true)
 
     const load = async () => {
-      // Odmah prikaži lokalne bilješke
       try {
         const local = await getAllNotesLocal()
         if (local.length > 0) {
@@ -61,7 +58,6 @@ export function useNotes(userId) {
         }
       } catch (e) { console.warn('local load:', e) }
 
-      // Dohvati s Supabasea
       try {
         const { data, error } = await supabase
           .from('notes').select('*')
@@ -99,18 +95,14 @@ export function useNotes(userId) {
     return true
   })
 
-  // ── CRUD ─────────────────────────────────────────────────────────────────
-
   const updateTimers = useRef({})
 
   const updateNote = useCallback(async (id, changes) => {
     const ts = new Date().toISOString()
     const updated = { ...changes, updated_at: ts }
 
-    // Odmah ažuriraj lokalni state
     setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updated } : n))
 
-    // Debounce Supabase update – čekaj 800ms bez novih promjena
     if (updateTimers.current[id]) clearTimeout(updateTimers.current[id])
     updateTimers.current[id] = setTimeout(async () => {
       setNotes(prev => {
@@ -120,6 +112,7 @@ export function useNotes(userId) {
           title:      fresh.title,
           content:    fresh.content,
           checklist:  fresh.checklist,
+          tables:     fresh.tables || [],   // ← tabele
           tags:       fresh.tags,
           starred:    fresh.starred,
           reminder:   fresh.reminder,
@@ -193,13 +186,14 @@ export function useNotes(userId) {
 
   const createNote = useCallback(async () => {
     const noteData = {
-      user_id: userId,
-      title: 'Nova bilješka',
-      content: '',
+      user_id:  userId,
+      title:    'Nova bilješka',
+      content:  '',
       checklist: [],
-      tags: [],
-      starred: false,
-      folder: ['posao','projekti','licno'].includes(view) ? view : 'projekti',
+      tables:   [],           // ← tabele
+      tags:     [],
+      starred:  false,
+      folder:   ['posao','projekti','licno'].includes(view) ? view : 'projekti',
       reminder: null,
       updated_at: new Date().toISOString(),
     }

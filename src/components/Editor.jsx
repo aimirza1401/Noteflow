@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Star, Bell, Trash2, Plus, X, Camera, Download, Share2, Mic, Clock } from 'lucide-react'
+import { Star, Bell, Trash2, Plus, X, Camera, Download, Share2, Mic, Clock, Table } from 'lucide-react'
 import { TAGS } from '../data/notes'
 import ReminderPanel from './ReminderPanel'
 import OCRCapture from './OCRCapture'
@@ -7,6 +7,7 @@ import ConfirmModal from './ConfirmModal'
 import ShareModal from './ShareModal'
 import VoiceRecorder from './VoiceRecorder'
 import HistoryPanel, { saveToHistory, getHistory } from './HistoryPanel'
+import TableEditor from './TableEditor'
 import { requestPermission, scheduleNotification, cancelNotification } from '../notifications'
 import { exportNoteToPDF } from '../exportPDF'
 import styles from './Editor.module.css'
@@ -32,6 +33,7 @@ export default function Editor({
   const [showShare,     setShowShare]     = useState(false)
   const [showVoice,     setShowVoice]     = useState(false)
   const [showHistory,   setShowHistory]   = useState(false)
+  const [showTables,    setShowTables]    = useState(false)
   const [newTask,       setNewTask]       = useState('')
   const [exporting,     setExporting]     = useState(false)
   const [historyCount,  setHistoryCount]  = useState(0)
@@ -43,13 +45,13 @@ export default function Editor({
   const histTimerRef = useRef(null)
   const lastNoteId   = useRef(null)
 
-  // ── Hooks moraju biti PRIJE bilo kojeg early return ───────────────────────
   const today = new Date().toISOString().split('T')[0]
   const hasUrgentReminder = note?.reminder && note.reminder.date === today
 
   const checklist   = note?.checklist || []
   const doneCount   = checklist.filter(c => c.done).length
   const totalCount  = checklist.length
+  const tables      = note?.tables || []
 
   const plainContent = (() => {
     try {
@@ -66,6 +68,7 @@ export default function Editor({
     if (lastNoteId.current !== note.id) {
       lastNoteId.current = note.id
       setHistoryCount(getHistory(note.id).length)
+      setShowTables(false)
     }
     clearInterval(histTimerRef.current)
     histTimerRef.current = setInterval(() => {
@@ -79,15 +82,14 @@ export default function Editor({
     return () => clearInterval(histTimerRef.current)
   }, [note?.id, note?.title, note?.content, note?.checklist])
 
-  // ── Early return POSLIJE svih hooka ──────────────────────────────────────
   if (!note) return null
 
-  // ── Handleri ─────────────────────────────────────────────────────────────
   const handleTitleChange = (e) => {
     updateNote(note.id, {
       title:     e.target.value,
       content:   note.content,
       checklist: note.checklist,
+      tables:    note.tables,
     })
     saveToHistory(note.id, { title: e.target.value, content: note.content, checklist: note.checklist })
     setHistoryCount(getHistory(note.id).length)
@@ -98,9 +100,19 @@ export default function Editor({
       title:     note.title,
       content:   e.target.value,
       checklist: note.checklist,
+      tables:    note.tables,
     })
     saveToHistory(note.id, { title: note.title, content: e.target.value, checklist: note.checklist })
     setHistoryCount(getHistory(note.id).length)
+  }
+
+  const handleTablesChange = (updatedTables) => {
+    updateNote(note.id, {
+      title:     note.title,
+      content:   note.content,
+      checklist: note.checklist,
+      tables:    updatedTables,
+    })
   }
 
   const handleAddTask = (e) => {
@@ -119,7 +131,7 @@ export default function Editor({
       return (div.innerText || div.textContent || '').trim()
     })()
     const combined = current ? current + '\n\n' + text : text
-    updateNote(note.id, { content: combined, title: note.title, checklist: note.checklist })
+    updateNote(note.id, { content: combined, title: note.title, checklist: note.checklist, tables: note.tables })
     saveToHistory(note.id, { title: note.title, content: combined, checklist: note.checklist })
   }
 
@@ -162,7 +174,15 @@ export default function Editor({
     const checklistMd = checklist.length
       ? '\n\n## Zadaci\n' + checklist.map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`).join('\n')
       : ''
-    const mdContent = `# ${note.title || 'Bilješka'}\n\n> ${formatDate(note.updatedAt || note.updated_at)}\n\n${plainContent}${checklistMd}`
+    const tablesMd = tables.length
+      ? tables.map(t => {
+          const header = '| ' + t.headers.join(' | ') + ' |'
+          const sep    = '| ' + t.headers.map(() => '---').join(' | ') + ' |'
+          const rows   = t.rows.map(r => '| ' + r.join(' | ') + ' |').join('\n')
+          return (t.title ? `\n\n### ${t.title}\n` : '\n\n') + header + '\n' + sep + '\n' + rows
+        }).join('\n')
+      : ''
+    const mdContent = `# ${note.title || 'Bilješka'}\n\n> ${formatDate(note.updatedAt || note.updated_at)}\n\n${plainContent}${checklistMd}${tablesMd}`
     const blob = new Blob([mdContent], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -198,6 +218,20 @@ export default function Editor({
           style={{ display:'flex', alignItems:'center', gap:4 }}>
           <Camera size={14} />
           <span style={{ fontSize:11 }}>OCR</span>
+        </button>
+
+        <button
+          className={`${styles.tbBtn} ${showTables ? styles.tbBtnBell : ''}`}
+          onClick={() => setShowTables(v => !v)} title="Tabele"
+          style={{ display:'flex', alignItems:'center', gap:4 }}>
+          <Table size={14} />
+          <span style={{ fontSize:11 }}>Tabela</span>
+          {tables.length > 0 && (
+            <span style={{
+              fontSize:9, background:'var(--blue)', color:'#fff',
+              borderRadius:6, padding:'1px 4px', lineHeight:1.4,
+            }}>{tables.length}</span>
+          )}
         </button>
 
         <button className={styles.tbBtn} onClick={handleExportPDF} disabled={exporting}
@@ -256,6 +290,17 @@ export default function Editor({
             background:'var(--surface)', outline:'none',
             fontFamily:"'DM Sans',sans-serif", lineHeight:1.75, resize:'vertical',
             boxSizing:'border-box', WebkitAppearance:'none' }} />
+
+        {/* Tabele */}
+        {showTables && (
+          <div>
+            <div style={{ fontSize:11, fontWeight:500, color:'var(--text-3)',
+              textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>
+              Tabele
+            </div>
+            <TableEditor tables={tables} onChange={handleTablesChange} />
+          </div>
+        )}
 
         {/* Checklist */}
         <div className={styles.checklist}>
