@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Search, BookOpen, Bell, CheckSquare, Star, Folder, Plus, LogOut } from 'lucide-react'
+import { Search, BookOpen, Bell, CheckSquare, Star, Folder, Plus, LogOut, X } from 'lucide-react'
 import { useTheme } from '../ThemeContext'
 import styles from './Sidebar.module.css'
 
@@ -25,12 +25,14 @@ const THEMES = [
 ]
 
 export default function Sidebar({ view, setView, search, setSearch, notes, createNote,
-  userEmail, onLogout, dark, setDark, currentLang, onLangChange }) {
+  userEmail, onLogout, dark, setDark, currentLang, onLangChange,
+  searchResults, searchLoading, onClearSearch }) {
   const { t } = useTranslation()
   const { theme, setTheme } = useTheme()
   const today = new Date().toISOString().split('T')[0]
 
   const activeLang = LANGS.find(l => l.code === currentLang) || LANGS[0]
+  const isSearching = search.trim().length > 0
 
   const counts = {
     sve:       notes.length,
@@ -61,25 +63,16 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
           <div className={styles.logoIcon}><BookOpen size={15} /></div>
           <span className={styles.logoName}>NoteFlow</span>
 
-          {/* LangIndicator — aktivni jezik uvijek vidljiv */}
-          <div style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-          }}>
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+            {/* LangIndicator */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '3px 8px', borderRadius: 6,
-              border: '1px solid var(--border)',
-              background: 'var(--bg)',
-              fontSize: 12, color: 'var(--text-2)',
-              cursor: 'default',
-            }}
-              title={`Aktivan jezik: ${activeLang.code.toUpperCase()}`}
-            >
-              <span style={{ fontSize: 14 }}>{activeLang.flag}</span>
-              <span style={{ fontWeight: 500, letterSpacing: '.03em' }}>
+              display:'flex', alignItems:'center', gap:4,
+              padding:'3px 8px', borderRadius:6,
+              border:'1px solid var(--border)', background:'var(--bg)',
+              fontSize:12, color:'var(--text-2)', cursor:'default',
+            }} title={`Aktivan jezik: ${activeLang.code.toUpperCase()}`}>
+              <span style={{ fontSize:14 }}>{activeLang.flag}</span>
+              <span style={{ fontWeight:500, letterSpacing:'.03em' }}>
                 {activeLang.code.toUpperCase()}
               </span>
             </div>
@@ -98,11 +91,53 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
           </div>
         </div>
 
-        <div className={styles.searchWrap}>
+        {/* Search input */}
+        <div className={styles.searchWrap} style={{ position:'relative' }}>
           <Search size={13} className={styles.searchIcon} />
-          <input className={styles.searchInput} placeholder={t('allNotes') + '...'}
-            value={search} onChange={e => setSearch(e.target.value)} />
+          <input
+            className={styles.searchInput}
+            placeholder={t('allNotes') + '...'}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {isSearching && (
+            <button
+              onClick={onClearSearch}
+              style={{
+                position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+                background:'transparent', border:'none', color:'var(--text-3)',
+                cursor:'pointer', display:'flex', alignItems:'center', padding:2,
+                borderRadius:4,
+              }}>
+              <X size={12} />
+            </button>
+          )}
         </div>
+
+        {/* Search rezultati */}
+        {isSearching && (
+          <div style={{
+            padding:'4px 14px 6px',
+            fontSize:11, color:'var(--text-3)',
+            display:'flex', alignItems:'center', gap:6,
+          }}>
+            {searchLoading ? (
+              <>
+                <span style={{ animation:'spin 1s linear infinite', display:'inline-block' }}>⟳</span>
+                Pretražujem...
+              </>
+            ) : searchResults ? (
+              <>
+                <span style={{ color: searchResults.length > 0 ? 'var(--blue)' : 'var(--text-3)' }}>
+                  {searchResults.length > 0
+                    ? `${searchResults.length} ${searchResults.length === 1 ? 'rezultat' : 'rezultata'}`
+                    : 'Nema rezultata'}
+                </span>
+                za „{search}"
+              </>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <nav className={styles.nav}>
@@ -110,7 +145,7 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
         {NAV.map(({ id, label, Icon, accent }) => (
           <button key={id}
             className={`${styles.navItem} ${view === id ? styles.active : ''}`}
-            onClick={() => setView(id)}>
+            onClick={() => { setView(id); onClearSearch && onClearSearch() }}>
             <Icon size={14} />
             <span>{label}</span>
             {counts[id] > 0 && (
@@ -127,7 +162,7 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
         {FOLDERS.map(({ id, label }) => (
           <button key={id}
             className={`${styles.navItem} ${view === id ? styles.active : ''}`}
-            onClick={() => setView(id)}>
+            onClick={() => { setView(id); onClearSearch && onClearSearch() }}>
             <Folder size={14} />
             <span>{label}</span>
             {counts[id] > 0 && <span className={styles.badge}>{counts[id]}</span>}
@@ -144,7 +179,7 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
               background: currentLang === code ? 'var(--blue-bg)' : 'transparent',
               border: `1px solid ${currentLang === code ? 'var(--blue-bd)' : 'var(--border)'}`,
               borderRadius:6, padding:'3px 7px', cursor:'pointer', fontSize:14,
-              transition: 'all .15s',
+              transition:'all .15s',
             }}>{flag}</button>
           ))}
         </div>

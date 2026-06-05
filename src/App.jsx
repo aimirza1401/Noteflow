@@ -13,6 +13,7 @@ import Onboarding from './components/Onboarding'
 import InstallBanner from './components/InstallBanner'
 import SharedNote from './components/SharedNote'
 import ErrorBoundary from './components/ErrorBoundary'
+import { useSearch } from './hooks/useSearch'
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
@@ -125,6 +126,9 @@ function NoteApp({ userId, userEmail }) {
   const isOnline = useOnline()
   const [activeTab, setActiveTab] = useState('list')
   const today = new Date().toISOString().split('T')[0]
+  const { query: searchQuery, setQuery: setSearchQuery,
+        results: searchResults, loading: searchLoading,
+        clear: clearSearch } = useSearch(userId)
 
   const {
     notes, filteredNotes, activeNote, activeId, setActiveId,
@@ -150,6 +154,7 @@ function NoteApp({ userId, userEmail }) {
   }, [])
 
   const todayCount = notes.filter(n => n.reminder && n.reminder.date === today).length
+  const visibleNotes = searchResults !== null ? searchResults : filteredNotes
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
@@ -373,14 +378,34 @@ function NoteApp({ userId, userEmail }) {
         </div>
       )}
       <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-        <Sidebar view={view} setView={setView} search={search} setSearch={setSearch}
-          notes={notes} createNote={createNote} userEmail={userEmail} onLogout={logout}
-          dark={dark} setDark={setDark} currentLang={i18n.language} onLangChange={changeLanguage} />
+        <Sidebar
+          view={view}
+          setView={setView}
+          search={searchQuery}
+          setSearch={setSearchQuery}
+          searchResults={searchResults}
+          searchLoading={searchLoading}
+          onClearSearch={clearSearch}
+          notes={visibleNotes}
+          createNote={createNote}
+          userEmail={userEmail}
+          onLogout={logout}
+          dark={dark}
+          setDark={setDark}
+          currentLang={i18n.language}
+          onLangChange={changeLanguage}
+        />
         <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
           <div style={{ width:340, flexShrink:0, borderRight:'1px solid var(--border)',
             overflow:'hidden', display:'flex', flexDirection:'column' }}>
-            <NoteList notes={filteredNotes} activeId={activeId}
-              setActiveId={setActiveId} view={view} setView={setView} allNotes={notes} />
+            <NoteList
+              notes={visibleNotes}
+              activeId={activeId}
+              setActiveId={setActiveId}
+              view={view}
+              setView={setView}
+              allNotes={notes}
+            />
             <button onClick={createNote} style={{
               position:'fixed', bottom:24, left:370, width:52, height:52,
               borderRadius:26, background:'var(--blue)', border:'none',
