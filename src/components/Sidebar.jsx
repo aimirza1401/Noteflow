@@ -30,6 +30,8 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
   const { theme, setTheme } = useTheme()
   const today = new Date().toISOString().split('T')[0]
 
+  const activeLang = LANGS.find(l => l.code === currentLang) || LANGS[0]
+
   const counts = {
     sve:       notes.length,
     danas:     notes.filter(n => n.reminder && n.reminder.date === today).length,
@@ -58,18 +60,44 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
         <div className={styles.logo}>
           <div className={styles.logoIcon}><BookOpen size={15} /></div>
           <span className={styles.logoName}>NoteFlow</span>
-          {/* Theme selector */}
-          <div style={{ marginLeft:'auto', display:'flex', gap:2 }}>
-            {THEMES.map(({ id, icon }) => (
-              <button key={id} onClick={() => setTheme(id)} title={id} style={{
-                background: theme === id ? 'var(--blue-bg)' : 'transparent',
-                border: `1px solid ${theme === id ? 'var(--blue-bd)' : 'transparent'}`,
-                borderRadius:6, padding:'3px 5px', cursor:'pointer', fontSize:13,
-                lineHeight:1,
-              }}>{icon}</button>
-            ))}
+
+          {/* LangIndicator — aktivni jezik uvijek vidljiv */}
+          <div style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '3px 8px', borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--bg)',
+              fontSize: 12, color: 'var(--text-2)',
+              cursor: 'default',
+            }}
+              title={`Aktivan jezik: ${activeLang.code.toUpperCase()}`}
+            >
+              <span style={{ fontSize: 14 }}>{activeLang.flag}</span>
+              <span style={{ fontWeight: 500, letterSpacing: '.03em' }}>
+                {activeLang.code.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Theme selector */}
+            <div style={{ display:'flex', gap:2 }}>
+              {THEMES.map(({ id, icon }) => (
+                <button key={id} onClick={() => setTheme(id)} title={id} style={{
+                  background: theme === id ? 'var(--blue-bg)' : 'transparent',
+                  border: `1px solid ${theme === id ? 'var(--blue-bd)' : 'transparent'}`,
+                  borderRadius:6, padding:'3px 5px', cursor:'pointer', fontSize:13,
+                  lineHeight:1,
+                }}>{icon}</button>
+              ))}
+            </div>
           </div>
         </div>
+
         <div className={styles.searchWrap}>
           <Search size={13} className={styles.searchIcon} />
           <input className={styles.searchInput} placeholder={t('allNotes') + '...'}
@@ -116,6 +144,7 @@ export default function Sidebar({ view, setView, search, setSearch, notes, creat
               background: currentLang === code ? 'var(--blue-bg)' : 'transparent',
               border: `1px solid ${currentLang === code ? 'var(--blue-bd)' : 'var(--border)'}`,
               borderRadius:6, padding:'3px 7px', cursor:'pointer', fontSize:14,
+              transition: 'all .15s',
             }}>{flag}</button>
           ))}
         </div>

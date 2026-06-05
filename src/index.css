@@ -41,3 +41,28 @@ html, body, #root {
 button { font-family: inherit; cursor: pointer; }
 input, textarea { font-family: inherit; }
 textarea { resize: none; }
+/* Glatka tranzicija pri promjeni teme */
+*, *::before, *::after {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+/* Izuzmi elemente kojima tranzicija smeta */
+input, textarea {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.15s ease;
+}
+
+button {
+  transition:
+    background-color 0.25s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
