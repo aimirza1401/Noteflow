@@ -100,6 +100,7 @@ async function googleVisionOCR(base64Image, languageValues) {
   return cleanOCRText(annotation?.text || '')
 }
 
+// ─── POBOLJŠAN tesseractFallback ─────────────────────────────────────────────
 async function tesseractFallback(base64Image, languageValues, onProgress) {
   const { createWorker } = await import('tesseract.js')
   const tesseractLanguages = getTesseractLanguages(languageValues)
@@ -114,6 +115,8 @@ async function tesseractFallback(base64Image, languageValues, onProgress) {
 
   try {
     await worker.setParameters({
+      // PSM 6 = jedan blok teksta — bolje za dokumente i mobilne fotke
+      tessedit_pageseg_mode: '6',
       preserve_interword_spaces: '1',
     })
 
@@ -142,18 +145,24 @@ function loadImage(dataUrl) {
   })
 }
 
+// ─── POBOLJŠAN preprocessImage ───────────────────────────────────────────────
+// Stara verzija je koristila agresivan globalni threshold koji je uništavao
+// mobilne fotke sa sjenama i neravnomjernim osvjetljenjem.
+// Nova verzija:
+// 1. Detektuje je li slika dokument ili fotografija
+// 2. Koristi adaptive threshold u blokovima 32x32 px
+// 3. Primjenjuje unsharp mask za fotografije
 async function preprocessImage(dataUrl) {
   const img = await loadImage(dataUrl)
 
-  // OCR bolje radi kada je dokument dovoljno velik, ali ne ogroman.
-  // Za fotografije sa mobitela normalizujemo širinu na oko 1800 px.
-  const maxWidth = 1800
-  const scale = Math.min(1, maxWidth / img.width)
-  const width = Math.max(1, Math.round(img.width * scale))
+  // Resize na optimalnu širinu za OCR
+  const MAX_W = 2000
+  const scale  = Math.min(1, MAX_W / img.width)
+  const width  = Math.max(1, Math.round(img.width  * scale))
   const height = Math.max(1, Math.round(img.height * scale))
 
   const canvas = document.createElement('canvas')
-  canvas.width = width
+  canvas.width  = width
   canvas.height = height
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
@@ -162,30 +171,112 @@ async function preprocessImage(dataUrl) {
   ctx.drawImage(img, 0, 0, width, height)
 
   const imageData = ctx.getImageData(0, 0, width, height)
-  const pixels = imageData.data
+  const pixels    = imageData.data
 
-  for (let i = 0; i < pixels.length; i += 4) {
-    const r = pixels[i]
-    const g = pixels[i + 1]
-    const b = pixels[i + 2]
+  // Korak 1: Konvertuj u grayscale (perceptualni BT.709)
+  const gray = new Uint8ClampedArray(width * height)
+  for (let i = 0; i < width * height; i++) {
+    gray[i] = Math.round(
+      0.2126 * pixels[i * 4] +
+      0.7152 * pixels[i * 4 + 1] +
+      0.0722 * pixels[i * 4 + 2]
+    )
+  }
 
-    let gray = r * 0.299 + g * 0.587 + b * 0.114
+  // Korak 2: Detektuj tip slike — dokument ili fotografija
+  // Dokumenti imaju visok kontrast (tamni tekst na bijeloj pozadini)
+  // Fotografije imaju manji raspon vrijednosti
+  let sum = 0
+  for (let i = 0; i < gray.length; i++) sum += gray[i]
+  const mean = sum / gray.length
 
-    // Blago posvjetljenje + pojačan kontrast: pomaže kod papira sa sjenama.
-    gray = (gray - 128) * 1.45 + 138
-    gray = Math.max(0, Math.min(255, gray))
+  let variance = 0
+  for (let i = 0; i < gray.length; i++) {
+    const diff = gray[i] - mean
+    variance += diff * diff
+  }
+  const stdDev     = Math.sqrt(variance / gray.length)
+  const isDocument = stdDev > 60
 
-    // Mekani prag: tamna slova jače zatamnimo, pozadinu posvijetlimo.
-    if (gray < 95) gray *= 0.7
-    if (gray > 205) gray = 255
+  // Korak 3: Adaptive threshold u blokovima 32x32
+  // Svaki blok dobija svoju lokalnu prosječnu vrijednost —
+  // rješava problem sjena i neravnomjernog osvjetljenja
+  const BLOCK  = 32
+  const result = new Uint8ClampedArray(width * height)
 
-    pixels[i] = gray
-    pixels[i + 1] = gray
-    pixels[i + 2] = gray
+  for (let by = 0; by < height; by += BLOCK) {
+    for (let bx = 0; bx < width; bx += BLOCK) {
+      // Izračunaj prosjek bloka
+      let blockSum   = 0
+      let blockCount = 0
+      for (let y = by; y < Math.min(by + BLOCK, height); y++) {
+        for (let x = bx; x < Math.min(bx + BLOCK, width); x++) {
+          blockSum += gray[y * width + x]
+          blockCount++
+        }
+      }
+      const blockMean = blockSum / blockCount
+
+      // Primjeni threshold na svaki piksel u bloku
+      for (let y = by; y < Math.min(by + BLOCK, height); y++) {
+        for (let x = bx; x < Math.min(bx + BLOCK, width); x++) {
+          const idx = y * width + x
+          const val = gray[idx]
+
+          if (isDocument) {
+            // Dokument: oštar threshold — tekst crn, pozadina bijela
+            result[idx] = val < blockMean - 8 ? 0 : 255
+          } else {
+            // Fotografija: blaži kontrast, čuva detalje
+            const normalized = (val - blockMean) * 1.2 + 140
+            result[idx] = Math.max(0, Math.min(255, normalized))
+          }
+        }
+      }
+    }
+  }
+
+  // Korak 4: Unsharp mask samo za fotografije — pojačava rubove slova
+  const final = new Uint8ClampedArray(width * height)
+
+  if (!isDocument) {
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx  = y * width + x
+        const blur = (
+          result[idx - width - 1] + result[idx - width] * 2 + result[idx - width + 1] +
+          result[idx - 1] * 2     + result[idx] * 4          + result[idx + 1] * 2 +
+          result[idx + width - 1] + result[idx + width] * 2 + result[idx + width + 1]
+        ) / 16
+        final[idx] = Math.max(0, Math.min(255,
+          result[idx] + (result[idx] - blur) * 0.6
+        ))
+      }
+    }
+    // Rubovi ostaju nepromijenjeni
+    for (let x = 0; x < width; x++) {
+      final[x] = result[x]
+      final[(height - 1) * width + x] = result[(height - 1) * width + x]
+    }
+    for (let y = 0; y < height; y++) {
+      final[y * width]           = result[y * width]
+      final[y * width + width - 1] = result[y * width + width - 1]
+    }
+  } else {
+    // Dokumenti ne trebaju unsharp mask
+    final.set(result)
+  }
+
+  // Korak 5: Upiši nazad u RGBA
+  for (let i = 0; i < width * height; i++) {
+    pixels[i * 4]     = final[i]
+    pixels[i * 4 + 1] = final[i]
+    pixels[i * 4 + 2] = final[i]
+    pixels[i * 4 + 3] = 255
   }
 
   ctx.putImageData(imageData, 0, 0)
-  return canvas.toDataURL('image/jpeg', 0.95)
+  return canvas.toDataURL('image/png')
 }
 
 export default function OCRCapture({ onSave, onClose }) {
@@ -202,7 +293,7 @@ export default function OCRCapture({ onSave, onClose }) {
   const [languageValues, setLanguageValues] = useState(DEFAULT_LANGUAGES)
   const [showProcessed, setShowProcessed] = useState(false)
 
-  const fileInputRef = useRef(null)
+  const fileInputRef   = useRef(null)
   const cameraInputRef = useRef(null)
 
   const selectedLanguageLabels = useMemo(() => {
@@ -342,7 +433,7 @@ export default function OCRCapture({ onSave, onClose }) {
     setProgress(0)
     setShowProcessed(false)
 
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (fileInputRef.current)   fileInputRef.current.value   = ''
     if (cameraInputRef.current) cameraInputRef.current.value = ''
   }
 
