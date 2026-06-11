@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useMemo } from 'react'
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Camera,
   Upload,
@@ -10,6 +11,7 @@ import {
   RotateCcw,
   Languages,
   Wand2,
+  ChevronDown,
 } from 'lucide-react'
 import { createWorker } from 'tesseract.js'
 import styles from './OCRCapture.module.css'
@@ -21,23 +23,79 @@ const VISION_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 const GOOGLE_VISION_ENABLED = false
 
 const LANGUAGE_OPTIONS = [
-  { value: 'bs', label: 'Bosanski', google: 'bs', tesseract: 'bos' },
-  { value: 'hr', label: 'Hrvatski', google: 'hr', tesseract: 'hrv' },
-  { value: 'sr', label: 'Srpski', google: 'sr', tesseract: 'srp' },
-  { value: 'en', label: 'English', google: 'en', tesseract: 'eng' },
-  { value: 'de', label: 'Deutsch', google: 'de', tesseract: 'deu' },
-  { value: 'fr', label: 'Français', google: 'fr', tesseract: 'fra' },
-  { value: 'it', label: 'Italiano', google: 'it', tesseract: 'ita' },
-  { value: 'es', label: 'Español', google: 'es', tesseract: 'spa' },
-  { value: 'tr', label: 'Türkçe', google: 'tr', tesseract: 'tur' },
-  { value: 'pt', label: 'Português', google: 'pt', tesseract: 'por' },
-  { value: 'ar', label: 'العربية', google: 'ar', tesseract: 'ara' },
-  { value: 'ja', label: '日本語', google: 'ja', tesseract: 'jpn' },
+  {
+    value: 'bs',
+    label: 'Bosanski',
+    google: ['bs', 'hr'],
+    tesseract: ['bos', 'hrv'],
+  },
+  {
+    value: 'hr',
+    label: 'Hrvatski',
+    google: ['hr', 'bs'],
+    tesseract: ['hrv', 'bos'],
+  },
+  {
+    value: 'sr',
+    label: 'Srpski',
+    google: ['sr', 'hr'],
+    tesseract: ['srp', 'hrv'],
+  },
+  {
+    value: 'en',
+    label: 'English',
+    google: ['en'],
+    tesseract: ['eng'],
+  },
+  {
+    value: 'de',
+    label: 'Deutsch',
+    google: ['de'],
+    tesseract: ['deu'],
+  },
+  {
+    value: 'fr',
+    label: 'Français',
+    google: ['fr'],
+    tesseract: ['fra'],
+  },
+  {
+    value: 'it',
+    label: 'Italiano',
+    google: ['it'],
+    tesseract: ['ita'],
+  },
+  {
+    value: 'es',
+    label: 'Español',
+    google: ['es'],
+    tesseract: ['spa'],
+  },
+  {
+    value: 'tr',
+    label: 'Türkçe',
+    google: ['tr'],
+    tesseract: ['tur'],
+  },
+  {
+    value: 'pt',
+    label: 'Português',
+    google: ['pt'],
+    tesseract: ['por'],
+  },
+  {
+    value: 'ar',
+    label: 'العربية',
+    google: ['ar'],
+    tesseract: ['ara'],
+  },
+  {
+    value: 'ja',
+    label: '日本語',
+    google: ['ja'],
+    tesseract: ['jpn'],
+  },
 ]
-
-// Za stabilnost ne biramo previše jezika automatski.
-// Korisnik može ručno dodati ostale.
-const DEFAULT_LANGUAGES = ['bs', 'hr', 'sr', 'en']
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -46,21 +104,31 @@ function cx(...classes) {
   return classes.filter(Boolean).join(' ')
 }
 
-function getSelectedLanguages(languageValues) {
-  return LANGUAGE_OPTIONS.filter(lang => languageValues.includes(lang.value))
+function normalizeLang(lang) {
+  const code = String(lang || 'bs').split('-')[0].toLowerCase()
+  return LANGUAGE_OPTIONS.some(item => item.value === code) ? code : 'bs'
 }
 
-function getGoogleLanguageHints(languageValues) {
-  const hints = getSelectedLanguages(languageValues).map(lang => lang.google)
-  return [...new Set(hints)]
+function getStoredAppLanguage() {
+  try {
+    return normalizeLang(localStorage.getItem('nf_lang') || 'bs')
+  } catch {
+    return 'bs'
+  }
 }
 
-function getTesseractLanguages(languageValues) {
-  const langs = getSelectedLanguages(languageValues)
-    .map(lang => lang.tesseract)
-    .filter(Boolean)
+function getLanguageOption(languageCode) {
+  return LANGUAGE_OPTIONS.find(lang => lang.value === normalizeLang(languageCode)) || LANGUAGE_OPTIONS[0]
+}
 
-  return [...new Set(langs)].join('+') || 'eng'
+function getGoogleLanguageHints(languageCode) {
+  const selected = getLanguageOption(languageCode)
+  return [...new Set(selected.google)]
+}
+
+function getTesseractLanguages(languageCode) {
+  const selected = getLanguageOption(languageCode)
+  return [...new Set(selected.tesseract)].join('+') || 'eng'
 }
 
 function cleanOCRText(value) {
@@ -74,7 +142,7 @@ function cleanOCRText(value) {
     .trim()
 }
 
-async function googleVisionOCR(base64Image, languageValues) {
+async function googleVisionOCR(base64Image, languageCode) {
   const imageData = base64Image.split(',')[1]
 
   if (!imageData) {
@@ -92,7 +160,7 @@ async function googleVisionOCR(base64Image, languageValues) {
             image: { content: imageData },
             features: [{ type: 'DOCUMENT_TEXT_DETECTION', maxResults: 1 }],
             imageContext: {
-              languageHints: getGoogleLanguageHints(languageValues),
+              languageHints: getGoogleLanguageHints(languageCode),
             },
           },
         ],
@@ -110,8 +178,8 @@ async function googleVisionOCR(base64Image, languageValues) {
   return cleanOCRText(annotation?.text || '')
 }
 
-async function tesseractOCR(base64Image, languageValues, onProgress) {
-  const tesseractLanguages = getTesseractLanguages(languageValues)
+async function tesseractOCR(base64Image, languageCode, onProgress) {
+  const tesseractLanguages = getTesseractLanguages(languageCode)
 
   try {
     const worker = await createWorker(tesseractLanguages, 1, {
@@ -133,7 +201,7 @@ async function tesseractOCR(base64Image, languageValues, onProgress) {
       await worker.terminate()
     }
   } catch (err) {
-    console.warn('Tesseract language OCR failed, trying English fallback:', err)
+    console.warn('Tesseract OCR failed for selected language, trying English fallback:', err)
 
     const worker = await createWorker('eng', 1, {
       logger: m => {
@@ -202,11 +270,9 @@ async function preprocessImage(dataUrl) {
 
     let gray = r * 0.299 + g * 0.587 + b * 0.114
 
-    // Blago posvjetljenje i kontrast za papir, screenshot i kameru.
     gray = (gray - 128) * 1.35 + 138
     gray = Math.max(0, Math.min(255, gray))
 
-    // Tamna slova malo potamnimo, svijetlu pozadinu posvijetlimo.
     if (gray < 95) gray *= 0.75
     if (gray > 210) gray = 255
 
@@ -221,6 +287,12 @@ async function preprocessImage(dataUrl) {
 }
 
 export default function OCRCapture({ onSave, onClose }) {
+  const { i18n } = useTranslation()
+
+  const appLanguage = useMemo(() => {
+    return normalizeLang(i18n.language || getStoredAppLanguage())
+  }, [i18n.language])
+
   const [preview, setPreview] = useState(null)
   const [processedPreview, setProcessedPreview] = useState(null)
   const [file, setFile] = useState(null)
@@ -230,15 +302,28 @@ export default function OCRCapture({ onSave, onClose }) {
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [languageValues, setLanguageValues] = useState(DEFAULT_LANGUAGES)
   const [showProcessed, setShowProcessed] = useState(false)
+
+  const [ocrLanguage, setOcrLanguage] = useState(() => getStoredAppLanguage())
+  const [manualLanguage, setManualLanguage] = useState(false)
+  const [showLanguageList, setShowLanguageList] = useState(false)
 
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
 
-  const selectedLanguageLabels = useMemo(() => {
-    return getSelectedLanguages(languageValues).map(lang => lang.label).join(', ')
-  }, [languageValues])
+  useEffect(() => {
+    if (!manualLanguage) {
+      setOcrLanguage(appLanguage)
+    }
+  }, [appLanguage, manualLanguage])
+
+  const selectedLanguage = useMemo(() => {
+    return getLanguageOption(ocrLanguage)
+  }, [ocrLanguage])
+
+  const appLanguageLabel = useMemo(() => {
+    return getLanguageOption(appLanguage).label
+  }, [appLanguage])
 
   const handleFile = useCallback(async selectedFile => {
     if (!selectedFile) return
@@ -291,15 +376,16 @@ export default function OCRCapture({ onSave, onClose }) {
 
   const onDragLeave = () => setDragOver(false)
 
-  const toggleLanguage = value => {
-    setLanguageValues(current => {
-      if (current.includes(value)) {
-        const next = current.filter(item => item !== value)
-        return next.length ? next : current
-      }
+  const handleLanguageSelect = value => {
+    setOcrLanguage(value)
+    setManualLanguage(value !== appLanguage)
+    setShowLanguageList(false)
+  }
 
-      return [...current, value]
-    })
+  const resetToAppLanguage = () => {
+    setOcrLanguage(appLanguage)
+    setManualLanguage(false)
+    setShowLanguageList(false)
   }
 
   const runOCR = useCallback(async () => {
@@ -318,9 +404,9 @@ export default function OCRCapture({ onSave, onClose }) {
       let result = ''
 
       if (GOOGLE_VISION_ENABLED && VISION_KEY) {
-        result = await googleVisionOCR(preparedImage, languageValues)
+        result = await googleVisionOCR(preparedImage, ocrLanguage)
       } else {
-        result = await tesseractOCR(preparedImage, languageValues, setProgress)
+        result = await tesseractOCR(preparedImage, ocrLanguage, setProgress)
       }
 
       if (!result.trim()) {
@@ -335,7 +421,7 @@ export default function OCRCapture({ onSave, onClose }) {
       setError('OCR nije uspio. Pokušaj s jasnijom slikom, boljim svjetlom ili ravnijim uglom.')
       setStatus('error')
     }
-  }, [preview, languageValues])
+  }, [preview, ocrLanguage])
 
   const handleSave = () => {
     if (!text.trim()) return
@@ -400,28 +486,76 @@ export default function OCRCapture({ onSave, onClose }) {
 
           <section className={styles.languagePanel}>
             <div className={styles.sectionLabel}>
-              <Languages size={13} /> Jezici za OCR
+              <Languages size={13} /> Jezik OCR-a
             </div>
 
-            <div className={styles.langGrid}>
-              {LANGUAGE_OPTIONS.map(lang => (
-                <button
-                  key={lang.value}
-                  type="button"
-                  onClick={() => toggleLanguage(lang.value)}
-                  className={cx(
-                    styles.langChip,
-                    languageValues.includes(lang.value) && styles.langChipActive
-                  )}
-                >
-                  {lang.label}
-                </button>
-              ))}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                padding: '10px 12px',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                background: 'var(--surface)',
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+                  {selectedLanguage.label}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                  {manualLanguage
+                    ? `Ručno izabran jezik. Jezik aplikacije je ${appLanguageLabel}.`
+                    : 'Automatski koristi jezik iz postavki aplikacije.'}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowLanguageList(value => !value)}
+                className={styles.secondarySmallBtn}
+                style={{ flexShrink: 0 }}
+              >
+                Promijeni <ChevronDown size={13} />
+              </button>
             </div>
 
-            <div className={styles.langHint}>
-              Odabrano: {selectedLanguageLabels}
-            </div>
+            {showLanguageList && (
+              <div style={{ marginTop: 10 }}>
+                <div className={styles.langGrid}>
+                  {LANGUAGE_OPTIONS.map(lang => (
+                    <button
+                      key={lang.value}
+                      type="button"
+                      onClick={() => handleLanguageSelect(lang.value)}
+                      className={cx(
+                        styles.langChip,
+                        ocrLanguage === lang.value && styles.langChipActive
+                      )}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+
+                {manualLanguage && (
+                  <button
+                    type="button"
+                    onClick={resetToAppLanguage}
+                    className={styles.secondarySmallBtn}
+                    style={{ marginTop: 10 }}
+                  >
+                    Koristi jezik aplikacije: {appLanguageLabel}
+                  </button>
+                )}
+
+                <div className={styles.langHint}>
+                  Za bosanski OCR automatski koristi bosanski + hrvatski model radi bolje preciznosti.
+                </div>
+              </div>
+            )}
           </section>
 
           {!preview ? (
