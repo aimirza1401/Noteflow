@@ -7,14 +7,18 @@ import {
   Loader,
   CheckCircle,
   AlertCircle,
-  Sparkles,
   RotateCcw,
   Languages,
   Wand2,
 } from 'lucide-react'
+import { createWorker } from 'tesseract.js'
 import styles from './OCRCapture.module.css'
 
 const VISION_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
+
+// Google Vision ostaje u kodu za kasnije Premium OCR opciju,
+// ali se trenutno ne prikazuje u UI-u i ne pokreće.
+const GOOGLE_VISION_ENABLED = false
 
 const LANGUAGE_OPTIONS = [
   { value: 'bs', label: 'Bosanski', google: 'bs', tesseract: 'bos' },
@@ -31,7 +35,10 @@ const LANGUAGE_OPTIONS = [
   { value: 'ja', label: '日本語', google: 'ja', tesseract: 'jpn' },
 ]
 
-const DEFAULT_LANGUAGES = ['bs', 'hr', 'sr', 'en', 'de']
+// Za stabilnost ne biramo previše jezika automatski.
+// Korisnik može ručno dodati ostale.
+const DEFAULT_LANGUAGES = ['bs', 'hr', 'sr', 'en']
+
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -49,7 +56,10 @@ function getGoogleLanguageHints(languageValues) {
 }
 
 function getTesseractLanguages(languageValues) {
-  const langs = getSelectedLanguages(languageValues).map(lang => lang.tesseract).filter(Boolean)
+  const langs = getSelectedLanguages(languageValues)
+    .map(lang => lang.tesseract)
+    .filter(Boolean)
+
   return [...new Set(langs)].join('+') || 'eng'
 }
 
@@ -100,27 +110,49 @@ async function googleVisionOCR(base64Image, languageValues) {
   return cleanOCRText(annotation?.text || '')
 }
 
-async function tesseractFallback(base64Image, languageValues, onProgress) {
-  const { createWorker } = await import('tesseract.js')
+async function tesseractOCR(base64Image, languageValues, onProgress) {
   const tesseractLanguages = getTesseractLanguages(languageValues)
 
-  const worker = await createWorker(tesseractLanguages, 1, {
-    logger: m => {
-      if (m.status === 'recognizing text') {
-        onProgress(Math.round((m.progress || 0) * 100))
-      }
-    },
-  })
-
   try {
-    await worker.setParameters({
-      preserve_interword_spaces: '1',
+    const worker = await createWorker(tesseractLanguages, 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          onProgress(Math.round((m.progress || 0) * 100))
+        }
+      },
     })
 
-    const { data } = await worker.recognize(base64Image)
-    return cleanOCRText(data.text)
-  } finally {
-    await worker.terminate()
+    try {
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+      })
+
+      const { data } = await worker.recognize(base64Image)
+      return cleanOCRText(data.text)
+    } finally {
+      await worker.terminate()
+    }
+  } catch (err) {
+    console.warn('Tesseract language OCR failed, trying English fallback:', err)
+
+    const worker = await createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          onProgress(Math.round((m.progress || 0) * 100))
+        }
+      },
+    })
+
+    try {
+      await worker.setParameters({
+        preserve_interword_spaces: '1',
+      })
+
+      const { data } = await worker.recognize(base64Image)
+      return cleanOCRText(data.text)
+    } finally {
+      await worker.terminate()
+    }
   }
 }
 
@@ -145,8 +177,6 @@ function loadImage(dataUrl) {
 async function preprocessImage(dataUrl) {
   const img = await loadImage(dataUrl)
 
-  // OCR bolje radi kada je dokument dovoljno velik, ali ne ogroman.
-  // Za fotografije sa mobitela normalizujemo širinu na oko 1800 px.
   const maxWidth = 1800
   const scale = Math.min(1, maxWidth / img.width)
   const width = Math.max(1, Math.round(img.width * scale))
@@ -157,6 +187,7 @@ async function preprocessImage(dataUrl) {
   canvas.height = height
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(img, 0, 0, width, height)
@@ -171,13 +202,13 @@ async function preprocessImage(dataUrl) {
 
     let gray = r * 0.299 + g * 0.587 + b * 0.114
 
-    // Blago posvjetljenje + pojačan kontrast: pomaže kod papira sa sjenama.
-    gray = (gray - 128) * 1.45 + 138
+    // Blago posvjetljenje i kontrast za papir, screenshot i kameru.
+    gray = (gray - 128) * 1.35 + 138
     gray = Math.max(0, Math.min(255, gray))
 
-    // Mekani prag: tamna slova jače zatamnimo, pozadinu posvijetlimo.
-    if (gray < 95) gray *= 0.7
-    if (gray > 205) gray = 255
+    // Tamna slova malo potamnimo, svijetlu pozadinu posvijetlimo.
+    if (gray < 95) gray *= 0.75
+    if (gray > 210) gray = 255
 
     pixels[i] = gray
     pixels[i + 1] = gray
@@ -185,6 +216,7 @@ async function preprocessImage(dataUrl) {
   }
 
   ctx.putImageData(imageData, 0, 0)
+
   return canvas.toDataURL('image/jpeg', 0.95)
 }
 
@@ -198,7 +230,6 @@ export default function OCRCapture({ onSave, onClose }) {
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [engine, setEngine] = useState(VISION_KEY ? 'google' : 'tesseract')
   const [languageValues, setLanguageValues] = useState(DEFAULT_LANGUAGES)
   const [showProcessed, setShowProcessed] = useState(false)
 
@@ -246,15 +277,18 @@ export default function OCRCapture({ onSave, onClose }) {
   }, [])
 
   const onInputChange = e => handleFile(e.target.files?.[0])
+
   const onDrop = e => {
     e.preventDefault()
     setDragOver(false)
     handleFile(e.dataTransfer.files?.[0])
   }
+
   const onDragOver = e => {
     e.preventDefault()
     setDragOver(true)
   }
+
   const onDragLeave = () => setDragOver(false)
 
   const toggleLanguage = value => {
@@ -263,6 +297,7 @@ export default function OCRCapture({ onSave, onClose }) {
         const next = current.filter(item => item !== value)
         return next.length ? next : current
       }
+
       return [...current, value]
     })
   }
@@ -276,17 +311,16 @@ export default function OCRCapture({ onSave, onClose }) {
     setError('')
     setShowProcessed(false)
 
-    let preparedImage = null
-
     try {
-      preparedImage = await preprocessImage(preview)
+      const preparedImage = await preprocessImage(preview)
       setProcessedPreview(preparedImage)
 
       let result = ''
-      if (VISION_KEY && engine === 'google') {
+
+      if (GOOGLE_VISION_ENABLED && VISION_KEY) {
         result = await googleVisionOCR(preparedImage, languageValues)
       } else {
-        result = await tesseractFallback(preparedImage, languageValues, setProgress)
+        result = await tesseractOCR(preparedImage, languageValues, setProgress)
       }
 
       if (!result.trim()) {
@@ -298,36 +332,19 @@ export default function OCRCapture({ onSave, onClose }) {
       setStatus('success')
     } catch (err) {
       console.error('OCR error:', err)
-
-      if (VISION_KEY && engine === 'google') {
-        try {
-          setError('Google Vision nije uspio. Pokušavam Tesseract fallback...')
-          const fallbackImage = preparedImage || (await preprocessImage(preview))
-          setProcessedPreview(fallbackImage)
-          const result = await tesseractFallback(fallbackImage, languageValues, setProgress)
-
-          if (result.trim()) {
-            setText(result)
-            setStatus('success')
-            setError('')
-          } else {
-            setStatus('notext')
-          }
-        } catch (fallbackErr) {
-          console.error('Tesseract fallback error:', fallbackErr)
-          setError('OCR nije uspio. Pokušaj s jasnijom slikom, boljim svjetlom ili ravnijim uglom.')
-          setStatus('error')
-        }
-      } else {
-        setError('OCR nije uspio. Pokušaj s jasnijom slikom, boljim svjetlom ili ravnijim uglom.')
-        setStatus('error')
-      }
+      setError('OCR nije uspio. Pokušaj s jasnijom slikom, boljim svjetlom ili ravnijim uglom.')
+      setStatus('error')
     }
-  }, [preview, engine, languageValues])
+  }, [preview, languageValues])
 
   const handleSave = () => {
     if (!text.trim()) return
-    onSave({ title: title.trim() || 'Bilješka sa slike', content: text.trim() })
+
+    onSave({
+      title: title.trim() || 'Bilješka sa slike',
+      content: text.trim(),
+    })
+
     onClose()
   }
 
@@ -359,10 +376,11 @@ export default function OCRCapture({ onSave, onClose }) {
             <div className={styles.iconBox}>
               <Camera size={16} />
             </div>
+
             <div>
               <div className={styles.title}>OCR – Slika u tekst</div>
               <div className={styles.subtitle}>
-                {VISION_KEY ? 'Google Vision AI + Tesseract fallback' : 'Tesseract.js lokalni OCR'}
+                Tesseract.js · Besplatni OCR
               </div>
             </div>
           </div>
@@ -380,29 +398,11 @@ export default function OCRCapture({ onSave, onClose }) {
             </span>
           </section>
 
-          {VISION_KEY && (
-            <section className={styles.segmented}>
-              <button
-                type="button"
-                onClick={() => setEngine('google')}
-                className={cx(styles.segmentBtn, engine === 'google' && styles.segmentBtnActive)}
-              >
-                <Sparkles size={13} /> Google Vision
-              </button>
-              <button
-                type="button"
-                onClick={() => setEngine('tesseract')}
-                className={cx(styles.segmentBtn, engine === 'tesseract' && styles.segmentBtnActive)}
-              >
-                <FileText size={13} /> Tesseract
-              </button>
-            </section>
-          )}
-
           <section className={styles.languagePanel}>
             <div className={styles.sectionLabel}>
               <Languages size={13} /> Jezici za OCR
             </div>
+
             <div className={styles.langGrid}>
               {LANGUAGE_OPTIONS.map(lang => (
                 <button
@@ -418,7 +418,10 @@ export default function OCRCapture({ onSave, onClose }) {
                 </button>
               ))}
             </div>
-            <div className={styles.langHint}>Odabrano: {selectedLanguageLabels}</div>
+
+            <div className={styles.langHint}>
+              Odabrano: {selectedLanguageLabels}
+            </div>
           </section>
 
           {!preview ? (
@@ -430,6 +433,7 @@ export default function OCRCapture({ onSave, onClose }) {
               className={cx(styles.dropzone, dragOver && styles.dropzoneActive)}
             >
               <Upload size={30} />
+
               <div className={styles.dropTitle}>Prevuci sliku ovdje</div>
               <div className={styles.dropHint}>JPG, PNG, WEBP, GIF, BMP · max 10 MB</div>
 
@@ -444,6 +448,7 @@ export default function OCRCapture({ onSave, onClose }) {
                 >
                   <Upload size={13} /> Odaberi fajl
                 </button>
+
                 <button
                   type="button"
                   onClick={e => {
@@ -465,7 +470,10 @@ export default function OCRCapture({ onSave, onClose }) {
               </button>
 
               <div className={styles.previewFooter}>
-                <span>{file?.name} · {file ? `${(file.size / 1024).toFixed(0)} KB` : ''}</span>
+                <span>
+                  {file?.name} · {file ? `${(file.size / 1024).toFixed(0)} KB` : ''}
+                </span>
+
                 {processedPreview && (
                   <button
                     type="button"
@@ -486,6 +494,7 @@ export default function OCRCapture({ onSave, onClose }) {
             onChange={onInputChange}
             className={styles.hiddenInput}
           />
+
           <input
             ref={cameraInputRef}
             type="file"
@@ -499,11 +508,7 @@ export default function OCRCapture({ onSave, onClose }) {
             {status === 'loading' && (
               <div className={styles.loadingPill}>
                 <Loader size={13} className={styles.spin} />
-                <span>
-                  {engine === 'google'
-                    ? 'Pripremam sliku i čitam tekst...'
-                    : `Tesseract čita tekst... ${progress}%`}
-                </span>
+                <span>Tesseract čita tekst... {progress}%</span>
               </div>
             )}
 
@@ -522,7 +527,7 @@ export default function OCRCapture({ onSave, onClose }) {
             )}
           </section>
 
-          {status === 'loading' && engine === 'tesseract' && (
+          {status === 'loading' && (
             <div className={styles.progressWrap}>
               <div className={styles.progressFill} style={{ width: `${progress}%` }} />
             </div>
@@ -538,13 +543,16 @@ export default function OCRCapture({ onSave, onClose }) {
           {status === 'notext' && (
             <div className={styles.warningBox}>
               <AlertCircle size={14} />
-              <span>Tekst nije prepoznat. Pokušaj s jasnijom, ravnijom ili svjetlijom slikom.</span>
+              <span>
+                Tekst nije prepoznat. Pokušaj s jasnijom, ravnijom ili svjetlijom slikom.
+              </span>
             </div>
           )}
 
           {status === 'success' && (
             <section className={styles.resultPanel}>
               <label className={styles.fieldLabel}>Naslov bilješke</label>
+
               <input
                 value={title}
                 onChange={e => setTitle(e.target.value)}
@@ -554,7 +562,9 @@ export default function OCRCapture({ onSave, onClose }) {
 
               <div className={styles.resultHeader}>
                 <label className={styles.fieldLabel}>Prepoznati tekst</label>
-                <span>{text.length} znakova · {text.split(/\s+/).filter(Boolean).length} riječi</span>
+                <span>
+                  {text.length} znakova · {text.split(/\s+/).filter(Boolean).length} riječi
+                </span>
               </div>
 
               <textarea
@@ -571,6 +581,7 @@ export default function OCRCapture({ onSave, onClose }) {
           <button type="button" onClick={onClose} className={styles.cancelBtn}>
             Odustani
           </button>
+
           <button
             type="button"
             onClick={handleSave}
